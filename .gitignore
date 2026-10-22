@@ -1,0 +1,51 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Local media storage root (AGENTS.md: storage/ gitignored)
+storage/
+storage/*
+!storage/.gitkeep
+
+# Node & Frontend
+node_modules/
+dist/
+dist-ssr/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Playwright & Testing
+test-results/
+playwright-report/
+**/test-results/
+**/playwright-report/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+env/
+venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Infra & Docker
+infra/data/
+.caddy/
+
+# Operating Systems & IDEs
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace

@@ -1,0 +1,16 @@
+{
+	auto_https off
+	admin off
+}
+
+:80 {
+	# API endpoints
+	handle /api/* {
+		reverse_proxy host.docker.internal:8000
+	}
+
+	# Frontend (Vite dev server in development)
+	handle {
+		reverse_proxy host.docker.internal:5173
+	}
+}

@@ -1,0 +1,15 @@
+{
+  "name": "ai-lecture-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter \"@lecture-platform/*\" --filter web build",
+    "test": "pnpm --filter web test",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm --filter \"@lecture-platform/*\" --filter web typecheck"
+  },
+  "packageManager": "pnpm@11.22.0"
+}

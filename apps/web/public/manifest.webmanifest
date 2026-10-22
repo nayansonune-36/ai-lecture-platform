@@ -1,0 +1,17 @@
+{
+  "name": "AI Lecture Platform",
+  "short_name": "Lectures",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "description": "Offline-capable university lecture catalog and AI tutor",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
