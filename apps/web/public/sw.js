@@ -1,6 +1,8 @@
 /**
  * Service Worker for AI Lecture Platform PWA.
+ * Fully offline-capable application shell.
  * Explicitly DOES NOT cache video/audio media chunks or HLS streams.
+ * Explicitly NEVER depends on any external network resource outside self.location.origin.
  */
 
 const CACHE_NAME = "lecture-shell-v1";
@@ -34,7 +36,12 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // 1. RULE: NEVER CACHE MEDIA (Video, Audio, HLS streams, master playlists)
+  // 1. RULE: ZERO EXTERNAL NETWORK DEPENDENCIES (strictly same-origin only)
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // 2. RULE: NEVER CACHE MEDIA (Video, Audio, HLS streams, master playlists)
   const isMedia =
     request.destination === "video" ||
     request.destination === "audio" ||
@@ -51,12 +58,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 2. Do not cache non-GET or API calls
+  // 3. Do not cache non-GET or API calls
   if (request.method !== "GET" || url.pathname.startsWith("/api/")) {
     return;
   }
 
-  // 3. App shell caching with Stale-While-Revalidate
+  // 4. App shell caching with Cache-First fallback to Network
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.match(request).then((cachedResponse) => {

@@ -61,7 +61,70 @@ pnpm --filter web build
 
 ---
 
-## 2. Where Files Live
+## 2. Running with No Internet (Air-Gapped / Zero-Internet Deployment)
+
+The platform is engineered to run 100% locally with zero internet connectivity. Content, transcripts, embeddings, and web UI assets never touch external networks.
+
+When deploying to an air-gapped university campus network or operating with WAN access disabled, the following artifacts must be prepared and installed ahead of time:
+
+### 1. Docker Images & Model Weights
+- **Pre-pull container images** on a staging machine and export them to a tar archive:
+  ```bash
+  docker pull pgvector/pgvector:pg16
+  docker pull redis:7-alpine
+  docker pull caddy:2-alpine
+  docker pull ollama/ollama:latest
+  docker save pgvector/pgvector:pg16 redis:7-alpine caddy:2-alpine ollama/ollama:latest -o platform-images.tar
+  ```
+- **Import on offline host**:
+  ```bash
+  docker load -i platform-images.tar
+  ```
+- **Ollama Offline Models**:
+  - Pre-download the multilingual embedding model (`bge-m3`, 1024 dimensions) and LLM:
+    ```bash
+    ollama pull bge-m3
+    ollama pull qwen2.5:7b   # or gemma2:9b
+    ```
+  - Copy the models cache directory (e.g., `~/.ollama/models`) to the host mount directory specified in `docker-compose.yml`.
+
+### 2. Python Packages & `uv` Caches
+- Sync virtual environments ahead of time on the server:
+  ```bash
+  cd services/api && uv sync
+  cd services/worker && uv sync
+  ```
+- For fully air-gapped transfer without pre-built environments, use `uv cache` or download local wheels:
+  ```bash
+  uv pip download -r pyproject.toml -d /offline/wheels
+  ```
+
+### 3. Node.js & `pnpm` Dependencies
+- Install workspace dependencies with locked versions:
+  ```bash
+  pnpm install --frozen-lockfile
+  ```
+- **Local Fonts & Assets**:
+  - The web application includes bundled local fonts (`@fontsource/inter` and `@fontsource/noto-sans-devanagari`), providing Latin and Devanagari typography with zero runtime CDN requests.
+  - Run `pnpm --filter web build` to compile all static assets into `apps/web/dist/`, which Caddy serves directly.
+  - The PWA Service Worker (`sw.js`) is configured to reject any non-local network requests and pre-caches the application shell.
+
+### 4. FFmpeg & ffprobe
+- Ensure static builds of `ffmpeg` and `ffprobe` (version 6.0 or higher) are installed on the system `PATH`:
+  - Linux: Copy static builds from `johnvansickle.com/ffmpeg/` to `/usr/local/bin/`.
+  - Windows: Extract static release binaries and add the `bin/` folder to the system `PATH`.
+  - Verify with: `ffmpeg -version` and `ffprobe -version`.
+
+### 5. Faster-Whisper Model Weights
+- Pre-download model weights for `faster-whisper` (`large-v3` or `large-v3-turbo`):
+  ```bash
+  python -c "from faster_whisper import WhisperModel; WhisperModel('large-v3', download_root='/opt/models/whisper')"
+  ```
+- Set `WHISPER_MODEL_DIR=/opt/models/whisper` in `.env` to prevent any runtime Hugging Face network requests.
+
+---
+
+## 3. Where Files Live
 
 Media assets are managed under `STORAGE_ROOT` (default `storage/` at repo root or configured via `.env`):
 
@@ -97,7 +160,7 @@ Database files and Redis persistence live inside Docker volumes:
 
 ---
 
-## 3. How to Retry a Failed Job
+## 4. How to Retry a Failed Job
 
 ### Automatic Retries
 The ARQ worker and transcode runner automatically retry failed jobs up to **3 times** with exponential backoff.
@@ -146,7 +209,7 @@ To re-run a failed job for a lecture:
 
 ---
 
-## 4. Backup & Disaster Recovery Note
+## 5. Backup & Disaster Recovery Note
 
 ### Postgres Database Backup
 Postgres contains all user accounts, course enrollments, lecture metadata, video chunks, playback progress, and permissions.
@@ -172,7 +235,7 @@ All original videos, HLS renditions, posters, and thumbnails live on local disk 
 
 ---
 
-## 5. AGENTS.md "NEVER do these" Compliance Audit
+## 6. AGENTS.md "NEVER do these" Compliance Audit
 
 | Rule | Requirement | Verification / Test Reference |
 |---|---|---|
@@ -191,7 +254,7 @@ All original videos, HLS renditions, posters, and thumbnails live on local disk 
 
 ---
 
-## 6. Phase 1 Manual Exit Checklist
+## 7. Phase 1 Manual Exit Checklist
 
 Before deploying or promoting the Phase 1 release to the campus network, complete this manual verification checklist:
 

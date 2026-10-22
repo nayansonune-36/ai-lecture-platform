@@ -69,6 +69,24 @@ test.describe("Full University Lecture Platform Lifecycle", () => {
 
   // Setup routes per context to guarantee full isolation
   async function setupContextRoutes(context: BrowserContext) {
+    // ZERO-INTERNET AUDIT: Deny all network requests to hosts other than our own baseURL
+    await context.route("**/*", async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const isLocal =
+        requestUrl.protocol === "data:" ||
+        requestUrl.protocol === "blob:" ||
+        requestUrl.hostname === "localhost" ||
+        requestUrl.hostname === "127.0.0.1";
+
+      if (!isLocal) {
+        await route.abort("blockedbyclient");
+        throw new Error(
+          `Zero-Internet Enforcement Failure: External network request attempted to ${route.request().url()}`
+        );
+      }
+      return route.fallback();
+    });
+
     // Intercept media requests
     await context.route("**/media/**", async (route) => {
       const request = route.request();
