@@ -46,6 +46,7 @@ def test_alembic_upgrade_sql() -> None:
     assert "CREATE TABLE chat_messages" in sql_output
     assert "CREATE TABLE devices" in sql_output
     assert "CREATE TABLE offline_licenses" in sql_output
+    assert "CREATE TABLE bundles" in sql_output
     assert "CREATE TABLE jobs" in sql_output
 
     # Check helper SQL function
@@ -58,10 +59,11 @@ def test_alembic_downgrade_sql() -> None:
     buf = io.StringIO()
 
     with redirect_stdout(buf):
-        downgrade(alembic_cfg, "0001_initial_schema:base", sql=True)
+        downgrade(alembic_cfg, "0002_add_bundles_table:base", sql=True)
 
     sql_output = buf.getvalue()
 
+    assert "DROP TABLE IF EXISTS bundles" in sql_output
     assert "DROP FUNCTION IF EXISTS can_view_lecture" in sql_output
     assert "DROP TABLE IF EXISTS jobs" in sql_output
     assert "DROP TABLE IF EXISTS users" in sql_output

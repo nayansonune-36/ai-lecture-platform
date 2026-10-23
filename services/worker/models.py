@@ -39,9 +39,28 @@ class JobStatus(enum.StrEnum):
     """Background job processing status."""
 
     QUEUED = "queued"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
+    RUNNING = "running"
+    PROCESSING = "running"
+    SUCCEEDED = "succeeded"
+    COMPLETED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class Course(Base):
+    """Course catalog entity."""
+
+    __tablename__ = "courses"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    term: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class LectureStatus(enum.StrEnum):
@@ -65,6 +84,7 @@ class Lecture(Base):
     )
     course_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
+        ForeignKey("courses.id", ondelete="CASCADE"),
         nullable=False,
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
@@ -102,6 +122,7 @@ class Lecture(Base):
         onupdate=func.now(),
     )
 
+    course: Mapped["Course | None"] = relationship("Course")
     renditions: Mapped[list["LectureRendition"]] = relationship(
         "LectureRendition",
         back_populates="lecture",
@@ -109,6 +130,11 @@ class Lecture(Base):
     )
     jobs: Mapped[list["Job"]] = relationship(
         "Job",
+        back_populates="lecture",
+        cascade="all, delete-orphan",
+    )
+    bundles: Mapped[list["Bundle"]] = relationship(
+        "Bundle",
         back_populates="lecture",
         cascade="all, delete-orphan",
     )
@@ -202,3 +228,86 @@ class Job(Base):
         Index("jobs_lecture_idx", "lecture_id", "type"),
         Index("jobs_status_idx", "status", "created_at"),
     )
+
+
+class Bundle(Base):
+    """Offline lecture bundle package."""
+
+    __tablename__ = "bundles"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    lecture_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("lectures.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    rendition: Mapped[int] = mapped_column(Integer, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.now(),
+    )
+
+    lecture: Mapped["Lecture"] = relationship(
+        "Lecture",
+        back_populates="bundles",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "lecture_id", "rendition", "version", name="bundles_lecture_rendition_version_uq"
+        ),
+        Index("bundles_lecture_rendition_idx", "lecture_id", "rendition"),
+    )
+
+
+class Chapter(Base):
+    """Chapter markers for video playback."""
+
+    __tablename__ = "chapters"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    lecture_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("lectures.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("lecture_id", "idx", name="chapters_lecture_idx_uq"),
+    )
+
+
+class TranscriptSegment(Base):
+    """Transcript segment for generating VTT captions."""
+
+    __tablename__ = "transcript_segments"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    lecture_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("lectures.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    end_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    lang: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("lecture_id", "idx", name="transcript_segments_lecture_idx_uq"),
+    )
+

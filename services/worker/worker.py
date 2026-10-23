@@ -5,6 +5,7 @@ from typing import Any
 
 from arq.connections import RedisSettings
 
+from bundle_job import bundle_lecture_job
 from settings import get_settings
 from transcode_job import transcode_lecture_job
 
@@ -40,10 +41,33 @@ async def transcode(
     return await transcode_lecture_job(lecture_id=lecture_id, job_id=job_id, attempt=job_try)
 
 
+async def bundle(
+    ctx: dict[str, Any],
+    lecture_id: str,
+    rendition: int,
+    job_id: str | None = None,
+) -> dict[str, Any]:
+    """Execute offline bundle creation job within ARQ worker context."""
+    job_try = ctx.get("job_try", 1)
+    logger.info(
+        "ARQ executing 'bundle' for lecture %s (rendition=%dp, job_id=%s, try=%d)",
+        lecture_id,
+        rendition,
+        job_id,
+        job_try,
+    )
+    return await bundle_lecture_job(
+        lecture_id=lecture_id,
+        rendition=rendition,
+        job_id=job_id,
+        attempt=job_try,
+    )
+
+
 class WorkerSettings:
     """ARQ worker settings."""
 
-    functions: list[Any] = [transcode]
+    functions: list[Any] = [transcode, bundle]
     on_startup = startup
     on_shutdown = shutdown
     max_tries: int = 3

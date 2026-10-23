@@ -1,5 +1,6 @@
 """SQLAlchemy models package."""
 
+from app.models.bundle import Bundle
 from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.enums import (
@@ -17,6 +18,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User
 
 __all__ = [
+    "Bundle",
     "ChatRole",
     "Course",
     "Enrollment",

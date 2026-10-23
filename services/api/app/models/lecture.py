@@ -24,6 +24,7 @@ from app.db import Base
 from app.models.enums import LectureStatus
 
 if TYPE_CHECKING:
+    from app.models.bundle import Bundle
     from app.models.course import Course
     from app.models.job import Job
     from app.models.playback import PlaybackProgress
@@ -111,6 +112,11 @@ class Lecture(Base):
     )
     playback_progress: Mapped[list["PlaybackProgress"]] = relationship(
         "PlaybackProgress",
+        back_populates="lecture",
+        cascade="all, delete-orphan",
+    )
+    bundles: Mapped[list["Bundle"]] = relationship(
+        "Bundle",
         back_populates="lecture",
         cascade="all, delete-orphan",
     )

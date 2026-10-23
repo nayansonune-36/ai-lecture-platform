@@ -134,6 +134,7 @@ Tools exposed to the model: `search_lecture(query)`, `seek(seconds)`, `summarize
 |---|---|---|
 | POST | `/devices` | Register a device, send its public key |
 | DELETE | `/devices/{id}` | Revoke; invalidates its licenses |
+| GET | `/lectures/{id}/offline-estimate?rendition=480` | Returns approximate bundle download size in bytes |
 | POST | `/lectures/{id}/offline-bundle` | `{"device_id", "rendition": 480}`; queues a `bundle` job |
 | GET | `/offline-bundles/{job_id}` | Status and signed download URL |
 | POST | `/offline-licenses/renew` | `{"device_id"}`; extends licenses for lectures the user is still enrolled in |

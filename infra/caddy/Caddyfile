@@ -9,6 +9,17 @@
 		reverse_proxy host.docker.internal:8000
 	}
 
+	# Protected media and bundle delivery with forward_auth
+	handle /media/* {
+		forward_auth host.docker.internal:8000 {
+			uri /api/v1/internal/auth/video?path={path}&{query}
+			copy_headers Range
+		}
+		root * /storage
+		uri strip_prefix /media
+		file_server
+	}
+
 	# Frontend (Vite dev server in development)
 	handle {
 		reverse_proxy host.docker.internal:5173

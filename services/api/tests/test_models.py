@@ -4,6 +4,7 @@ import uuid
 
 from app.db import Base
 from app.models import (
+    Bundle,
     Course,
     Enrollment,
     EnrollmentRole,
@@ -29,6 +30,7 @@ def test_metadata_contains_required_tables() -> None:
         "lecture_renditions",
         "playback_progress",
         "jobs",
+        "bundles",
     }
     registered_tables = set(Base.metadata.tables.keys())
     assert expected_tables.issubset(registered_tables), (
@@ -139,6 +141,14 @@ def test_model_instantiation() -> None:
     )
     progress = PlaybackProgress(user_id=uid, lecture_id=lid, position_ms=1000)
     job = Job(lecture_id=lid, type=JobType.TRANSCODE, status=JobStatus.QUEUED)
+    bundle = Bundle(
+        lecture_id=lid,
+        rendition=480,
+        version=1,
+        path="bundles/test/480p-v1.zip",
+        size_bytes=1000000,
+        sha256="abc123sha",
+    )
 
     assert user.role == UserRole.STUDENT
     assert course.code == "CS101"
@@ -147,3 +157,5 @@ def test_model_instantiation() -> None:
     assert rendition.height == 720
     assert progress.position_ms == 1000
     assert job.type == JobType.TRANSCODE
+    assert bundle.rendition == 480
+    assert bundle.version == 1

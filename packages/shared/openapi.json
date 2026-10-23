@@ -967,6 +967,175 @@
         }
       }
     },
+    "/api/v1/lectures/{id}/offline-estimate": {
+      "get": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "Estimate offline bundle size",
+        "description": "Returns approximate size in bytes for chosen rendition before download.",
+        "operationId": "get_bundle_estimate_api_v1_lectures__id__offline_estimate_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "rendition",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Rendition height (720, 480, 360)",
+              "default": 480,
+              "title": "Rendition"
+            },
+            "description": "Rendition height (720, 480, 360)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineEstimateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lectures/{id}/offline-bundle": {
+      "post": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "Request offline bundle packaging",
+        "description": "Queue bundle creation or immediately return signed download URL if ready.",
+        "operationId": "create_offline_bundle_api_v1_lectures__id__offline_bundle_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfflineBundleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineBundleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/offline-bundles/{job_id}": {
+      "get": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "Check offline bundle status",
+        "description": "Returns job status and signed download URL when bundle packaging is complete.",
+        "operationId": "get_bundle_status_api_v1_offline_bundles__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineBundleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/lectures/{id}/playback-token": {
       "post": {
         "tags": [
@@ -1357,6 +1526,74 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReadyzResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/{file_path}": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Protected media delivery",
+        "description": "Serves media files with signed token verification and HTTP Range support.",
+        "operationId": "serve_media_file_media__file_path__get",
+        "parameters": [
+          {
+            "name": "file_path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Path"
+            }
+          },
+          {
+            "name": "exp",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Exp"
+            }
+          },
+          {
+            "name": "uid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Uid"
+            }
+          },
+          {
+            "name": "sig",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sig"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2194,6 +2431,111 @@
         "type": "object",
         "title": "LogoutResponse",
         "description": "Logout response payload."
+      },
+      "OfflineBundleRequest": {
+        "properties": {
+          "device_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "rendition": {
+            "type": "integer",
+            "title": "Rendition",
+            "description": "Rendition height (720, 480, 360)",
+            "default": 480
+          }
+        },
+        "type": "object",
+        "title": "OfflineBundleRequest",
+        "description": "Request payload to queue or retrieve offline bundle."
+      },
+      "OfflineBundleResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bundle_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Id"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "OfflineBundleResponse",
+        "description": "Status and signed download URL for an offline bundle."
+      },
+      "OfflineEstimateResponse": {
+        "properties": {
+          "lecture_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lecture Id"
+          },
+          "rendition": {
+            "type": "integer",
+            "title": "Rendition"
+          },
+          "estimated_size_bytes": {
+            "type": "integer",
+            "title": "Estimated Size Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lecture_id",
+          "rendition",
+          "estimated_size_bytes"
+        ],
+        "title": "OfflineEstimateResponse",
+        "description": "Estimated bundle download size in bytes."
       },
       "PlaybackProgressOut": {
         "properties": {

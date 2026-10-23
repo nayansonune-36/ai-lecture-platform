@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.errors import ApiError
 from app.db import engine
-from app.routers import auth, courses, health, lectures, playback
+from app.routers import auth, courses, health, lectures, media, offline, playback
 
 
 @asynccontextmanager
@@ -65,8 +65,12 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(courses.router, prefix="/api/v1")
 app.include_router(lectures.router, prefix="/api/v1")
+app.include_router(offline.router, prefix="/api/v1")
 app.include_router(playback.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
+
+# Media delivery with signed token verification and Range support
+app.include_router(media.router)
 
 # Also mount health at root for container orchestration probes
 app.include_router(health.router)

@@ -64,6 +64,11 @@ class Settings(BaseSettings):
             return repo_path
         return cwd_path
 
+    @property
+    def resolved_storage_root(self) -> Path:
+        """Alias for storage_root matching worker settings convention."""
+        return self.storage_root
+
 
 @lru_cache
 def get_settings() -> Settings:

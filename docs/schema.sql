@@ -179,8 +179,21 @@ CREATE TABLE chat_messages (
 CREATE INDEX chat_messages_session_idx ON chat_messages (session_id, id);
 
 -- ---------------------------------------------------------------------------
--- Offline devices and licenses
+-- Offline bundles, devices and licenses
 -- ---------------------------------------------------------------------------
+CREATE TABLE bundles (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    lecture_id  uuid NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+    rendition   integer NOT NULL,              -- height (720, 480, 360)
+    version     integer NOT NULL DEFAULT 1,
+    path        text NOT NULL,                 -- relative to STORAGE_ROOT
+    size_bytes  bigint NOT NULL,
+    sha256      text NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (lecture_id, rendition, version)
+);
+CREATE INDEX bundles_lecture_rendition_idx ON bundles (lecture_id, rendition);
+
 CREATE TABLE devices (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,

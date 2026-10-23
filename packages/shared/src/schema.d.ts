@@ -322,6 +322,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lectures/{id}/offline-estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estimate offline bundle size
+         * @description Returns approximate size in bytes for chosen rendition before download.
+         */
+        get: operations["get_bundle_estimate_api_v1_lectures__id__offline_estimate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lectures/{id}/offline-bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request offline bundle packaging
+         * @description Queue bundle creation or immediately return signed download URL if ready.
+         */
+        post: operations["create_offline_bundle_api_v1_lectures__id__offline_bundle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/offline-bundles/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check offline bundle status
+         * @description Returns job status and signed download URL when bundle packaging is complete.
+         */
+        get: operations["get_bundle_status_api_v1_offline_bundles__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lectures/{id}/playback-token": {
         parameters: {
             query?: never;
@@ -458,6 +518,26 @@ export interface paths {
          * @description Checks reachability of PostgreSQL, Redis, and writable storage root.
          */
         get: operations["get_readyz_api_v1_readyz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/{file_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Protected media delivery
+         * @description Serves media files with signed token verification and HTTP Range support.
+         */
+        get: operations["serve_media_file_media__file_path__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -846,6 +926,54 @@ export interface components {
              * @default ok
              */
             status: string;
+        };
+        /**
+         * OfflineBundleRequest
+         * @description Request payload to queue or retrieve offline bundle.
+         */
+        OfflineBundleRequest: {
+            /** Device Id */
+            device_id?: string | null;
+            /**
+             * Rendition
+             * @description Rendition height (720, 480, 360)
+             * @default 480
+             */
+            rendition: number;
+        };
+        /**
+         * OfflineBundleResponse
+         * @description Status and signed download URL for an offline bundle.
+         */
+        OfflineBundleResponse: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Status */
+            status: string;
+            /** Bundle Id */
+            bundle_id?: string | null;
+            /** Download Url */
+            download_url?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+        };
+        /**
+         * OfflineEstimateResponse
+         * @description Estimated bundle download size in bytes.
+         */
+        OfflineEstimateResponse: {
+            /**
+             * Lecture Id
+             * Format: uuid
+             */
+            lecture_id: string;
+            /** Rendition */
+            rendition: number;
+            /** Estimated Size Bytes */
+            estimated_size_bytes: number;
         };
         /**
          * PlaybackProgressOut
@@ -1650,6 +1778,106 @@ export interface operations {
             };
         };
     };
+    get_bundle_estimate_api_v1_lectures__id__offline_estimate_get: {
+        parameters: {
+            query?: {
+                /** @description Rendition height (720, 480, 360) */
+                rendition?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfflineEstimateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_offline_bundle_api_v1_lectures__id__offline_bundle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfflineBundleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfflineBundleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bundle_status_api_v1_offline_bundles__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfflineBundleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_playback_token_api_v1_lectures__id__playback_token_post: {
         parameters: {
             query?: never;
@@ -1891,6 +2119,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadyzResponse"];
+                };
+            };
+        };
+    };
+    serve_media_file_media__file_path__get: {
+        parameters: {
+            query: {
+                exp: number;
+                uid: string;
+                sig: string;
+            };
+            header?: never;
+            path: {
+                file_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
