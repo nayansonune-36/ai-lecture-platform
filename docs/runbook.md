@@ -59,6 +59,16 @@ pnpm --filter web dev
 pnpm --filter web build
 ```
 
+### Step 6: Student Desktop Application (Tauri v2)
+To launch the Windows student desktop application in development mode:
+```bash
+pnpm --filter desktop tauri dev
+```
+Prerequisites:
+- Rust (1.75+) and Cargo installed on the host.
+- Windows 10/11 with WebView2 Runtime (standard on modern Windows).
+- The desktop application automatically starts the frontend on `http://localhost:5173` and binds the native Rust shell with SQLite database, Windows Credential Manager integration, and local desktop screens.
+
 ---
 
 ## 2. Running with No Internet (Air-Gapped / Zero-Internet Deployment)

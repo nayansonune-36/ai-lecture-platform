@@ -8,6 +8,8 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { CourseListPage } from "./pages/CourseListPage.js";
 import { CourseDetailPage } from "./pages/CourseDetailPage.js";
 import { LecturePage } from "./pages/LecturePage.js";
+import { isDesktop } from "./desktop/isDesktop.js";
+import { DesktopApp } from "./desktop/DesktopApp.js";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,6 +21,10 @@ const queryClient = new QueryClient({
 });
 
 export function App() {
+  if (isDesktop()) {
+    return <DesktopApp />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
