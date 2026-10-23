@@ -68,13 +68,13 @@ The platform is engineered to run 100% locally with zero internet connectivity. 
 When deploying to an air-gapped university campus network or operating with WAN access disabled, the following artifacts must be prepared and installed ahead of time:
 
 ### 1. Docker Images & Model Weights
-- **Pre-pull container images** on a staging machine and export them to a tar archive:
+- **Pre-pull container images** on a staging machine and export them to a tar archive (using pinned tags, no `:latest`):
   ```bash
-  docker pull pgvector/pgvector:pg16
-  docker pull redis:7-alpine
-  docker pull caddy:2-alpine
-  docker pull ollama/ollama:latest
-  docker save pgvector/pgvector:pg16 redis:7-alpine caddy:2-alpine ollama/ollama:latest -o platform-images.tar
+  docker pull pgvector/pgvector:0.8.0-pg16
+  docker pull redis:7.4.2-alpine
+  docker pull caddy:2.9.1-alpine
+  docker pull ollama/ollama:0.5.12
+  docker save pgvector/pgvector:0.8.0-pg16 redis:7.4.2-alpine caddy:2.9.1-alpine ollama/ollama:0.5.12 -o platform-images.tar
   ```
 - **Import on offline host**:
   ```bash
@@ -282,4 +282,14 @@ Before deploying or promoting the Phase 1 release to the campus network, complet
   - The player loads with the saved position (`position_ms: 155000`).
   - The resume toast notification (`Resuming from 02:35` / `02:35 से फिर शुरू`) displays immediately.
   - Video scrubber and `video.currentTime` automatically initialize at the saved offset within 5 seconds of the target timestamp.
+
+### [ ] 4. Manual Air-Gap Check (Physical Zero-Internet Test)
+- **Action**: Verify completely air-gapped campus operation:
+  1. **Unplug internet / WAN cable** from the server PC (or disable default gateway / WAN interface).
+  2. **Open the web application** from a separate LAN device (laptop, tablet, smartboard) via local hostname (e.g., `https://lectures.campus.internal` or `http://<server-ip>:8080`).
+  3. **Log in** with student credentials (`student1@university.edu` / `Password123!`).
+  4. **Play a lecture**: ensure video stream initializes, seeks, and plays smoothly with zero buffering or stalled requests.
+  5. **Switch language to Hindi (`हिन्दी`)**:
+     - Confirm UI re-renders immediately in Devanagari script using locally bundled `@fontsource/noto-sans-devanagari`.
+     - Inspect browser Developer Tools Network tab: confirm **0 requests fail**, **0 requests time out**, and **0 external domain requests** are attempted.
 

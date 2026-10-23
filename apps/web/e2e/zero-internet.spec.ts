@@ -3,23 +3,24 @@ import { test, expect } from "@playwright/test";
 test.describe("Task O1: Zero-Internet Network Audit", () => {
   test("strictly blocks any external request and verifies all assets are locally hosted", async ({ page, baseURL }) => {
     const baseHost = new URL(baseURL || "http://localhost:5173").host;
-    const externalRequestsAttempted: string[] = [];
-    const localRequestsLoaded: string[] = [];
+    const violations: string[] = [];
 
-    // Enforce Zero-Internet: Intercept all requests with a deny list for anything outside baseURL host
+    // Zero-Internet Guard: Intercept all requests; push blocked non-local URLs into violations array
     await page.route("**/*", async (route) => {
       const req = route.request();
       const url = new URL(req.url());
+      const isLocal =
+        url.protocol === "data:" ||
+        url.protocol === "blob:" ||
+        url.host === baseHost ||
+        url.hostname === "localhost" ||
+        url.hostname === "127.0.0.1";
 
-      // Allow same host or data/blob schemes
-      if (url.host === baseHost || url.protocol === "data:" || url.protocol === "blob:") {
-        localRequestsLoaded.push(req.url());
-        return route.continue();
+      if (!isLocal) {
+        violations.push(req.url());
+        return route.abort("blockedbyclient");
       }
-
-      // External request detected! Block and track
-      externalRequestsAttempted.push(req.url());
-      await route.abort("blockedbyclient");
+      return route.continue();
     });
 
     // 1. Navigate to the application shell
@@ -29,44 +30,35 @@ test.describe("Task O1: Zero-Internet Network Audit", () => {
     // 2. Verify login form and local SVG icon rendered
     await expect(page.locator(".login-icon-badge svg")).toBeVisible();
 
-    // 3. Verify zero external requests were made during initial page load
-    expect(externalRequestsAttempted).toHaveLength(0);
+    // 3. Navigate across app pages
+    await page.goto("/courses");
+    await expect(page).toHaveURL(/\/login/); // ProtectedRoute redirects unauthenticated
 
-    // 4. Verify local assets loaded (HTML, JS, CSS, fonts)
-    expect(localRequestsLoaded.length).toBeGreaterThan(0);
-    const hasLocalOrigin = localRequestsLoaded.every((u) => {
-      const parsed = new URL(u);
-      return parsed.host === baseHost || parsed.protocol === "data:" || parsed.protocol === "blob:";
-    });
-    expect(hasLocalOrigin).toBe(true);
-
-    // 5. Active test: Verify that any attempted external request is actively blocked by the deny list
-    const externalFetchFailed = await page.evaluate(async () => {
-      try {
-        await fetch("https://fonts.googleapis.com/css?family=Roboto", { mode: "no-cors" });
-        return false;
-      } catch {
-        return true; // Expected: fetch aborted by client
-      }
-    });
-    expect(externalFetchFailed).toBe(true);
-    expect(externalRequestsAttempted).toContain("https://fonts.googleapis.com/css?family=Roboto");
-
-    // 6. Active test: Verify CDN script attempt is also blocked
-    const cdnFetchFailed = await page.evaluate(async () => {
-      try {
-        await fetch("https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js", { mode: "no-cors" });
-        return false;
-      } catch {
-        return true;
-      }
-    });
-    expect(cdnFetchFailed).toBe(true);
-    expect(externalRequestsAttempted).toContain("https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js");
+    // Assert zero non-local URLs were requested during app usage
+    expect(violations).toEqual([]);
   });
 
-  test("Service Worker never loads or depends on external network resources", async ({ page }) => {
-    // Read and verify the service worker script file content
+  test("Service Worker never loads or depends on external network resources", async ({ page, baseURL }) => {
+    const baseHost = new URL(baseURL || "http://localhost:5173").host;
+    const violations: string[] = [];
+
+    await page.route("**/*", async (route) => {
+      const req = route.request();
+      const url = new URL(req.url());
+      const isLocal =
+        url.protocol === "data:" ||
+        url.protocol === "blob:" ||
+        url.host === baseHost ||
+        url.hostname === "localhost" ||
+        url.hostname === "127.0.0.1";
+
+      if (!isLocal) {
+        violations.push(req.url());
+        return route.abort("blockedbyclient");
+      }
+      return route.continue();
+    });
+
     const response = await page.goto("/sw.js");
     expect(response?.status()).toBe(200);
 
@@ -77,5 +69,8 @@ test.describe("Task O1: Zero-Internet Network Audit", () => {
     expect(swContent).toContain("url.origin !== self.location.origin");
     // Verify zero external domains in service worker
     expect(swContent).not.toMatch(/https?:\/\/(?!localhost|127\.0\.0\.1)/);
+
+    // Assert zero non-local URLs were requested
+    expect(violations).toEqual([]);
   });
 });

@@ -49,6 +49,7 @@ test.describe("Full University Lecture Platform Lifecycle", () => {
   const jobs: Record<string, MockJob[]> = {};
   const progress: Record<string, { position_ms: number; completed: boolean }> = {};
   const revokedTokens = new Set<string>();
+  const violations: string[] = [];
 
   let createdLectureId = "";
   let student1ManifestUrl = "";
@@ -79,10 +80,8 @@ test.describe("Full University Lecture Platform Lifecycle", () => {
         requestUrl.hostname === "127.0.0.1";
 
       if (!isLocal) {
-        await route.abort("blockedbyclient");
-        throw new Error(
-          `Zero-Internet Enforcement Failure: External network request attempted to ${route.request().url()}`
-        );
+        violations.push(route.request().url());
+        return route.abort("blockedbyclient");
       }
       return route.fallback();
     });
@@ -740,5 +739,8 @@ test.describe("Full University Lecture Platform Lifecycle", () => {
     expect([401, 403]).toContain(tamperedStatus);
 
     await student2Context.close();
+
+    // Assert zero external network requests occurred during the entire lifecycle
+    expect(violations).toEqual([]);
   });
 });
