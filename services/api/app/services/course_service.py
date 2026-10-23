@@ -295,14 +295,16 @@ async def remove_course_enrollment(
         raise ApiError(status_code=404, code="enrollment_not_found", message="Enrollment not found")
 
     # Revoke offline licenses for lectures belonging to this course
+    now = datetime.now(UTC)
     try:
         await db.execute(
             text(
-                "DELETE FROM offline_licenses "
+                "UPDATE offline_licenses SET revoked_at = :now "
                 "WHERE user_id = :member_id "
-                "AND lecture_id IN (SELECT id FROM lectures WHERE course_id = :course_id)"
+                "AND lecture_id IN (SELECT id FROM lectures WHERE course_id = :course_id) "
+                "AND revoked_at IS NULL"
             ),
-            {"member_id": member_id, "course_id": course_id},
+            {"member_id": member_id, "course_id": course_id, "now": now},
         )
     except Exception:
         # Table might not exist in SQLite unit test environment

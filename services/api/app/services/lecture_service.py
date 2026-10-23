@@ -3,13 +3,15 @@
 import re
 import shutil
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError, forbidden
 from app.models.course import Course
+from app.models.device import OfflineLicense
 from app.models.enrollment import Enrollment
 from app.models.enums import JobStatus, JobType, LectureStatus, UserRole
 from app.models.job import Job
@@ -321,6 +323,16 @@ async def update_lecture(
         lecture.position = data.position
     if data.published is not None:
         lecture.published = data.published
+        if not data.published:
+            now = datetime.now(UTC)
+            await db.execute(
+                update(OfflineLicense)
+                .where(
+                    OfflineLicense.lecture_id == lecture.id,
+                    OfflineLicense.revoked_at.is_(None),
+                )
+                .values(revoked_at=now)
+            )
     if data.primary_language is not None:
         lecture.primary_language = data.primary_language
 

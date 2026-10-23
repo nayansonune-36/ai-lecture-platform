@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     media_signing_key: str = "dev-insecure-media-signing-key-change-in-production"
     media_url_expire_minutes: int = 15
 
+    # Offline License Signing (Ed25519 PKCS8 PEM or seed)
+    license_signing_key: str = ""
+
     # AI Models (Ollama)
     ollama_base_url: str = "http://localhost:11434"
     embedding_model: str = "bge-m3"

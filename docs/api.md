@@ -132,12 +132,14 @@ Tools exposed to the model: `search_lecture(query)`, `seek(seconds)`, `summarize
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/devices` | Register a device, send its public key |
-| DELETE | `/devices/{id}` | Revoke; invalidates its licenses |
+| POST | `/devices` | Register a device, send its public key (max 3 active devices per user) |
+| GET | `/devices` | List user's registered devices |
+| DELETE | `/devices/{id}` | Revoke device; invalidates all its licenses |
+| GET | `/license-public-key` | Returns Ed25519 public key in PEM format for license verification |
 | GET | `/lectures/{id}/offline-estimate?rendition=480` | Returns approximate bundle download size in bytes |
-| POST | `/lectures/{id}/offline-bundle` | `{"device_id", "rendition": 480}`; queues a `bundle` job |
-| GET | `/offline-bundles/{job_id}` | Status and signed download URL |
-| POST | `/offline-licenses/renew` | `{"device_id"}`; extends licenses for lectures the user is still enrolled in |
+| POST | `/lectures/{id}/offline-bundle` | `{"device_id", "rendition": 480}`; queues or reuses `bundle` job, creates or refreshes offline license |
+| GET | `/offline-bundles/{job_id}` | Status, size_bytes, sha256, signed download URL, and license token |
+| POST | `/offline-licenses/renew` | `{"device_id"}`; extends licenses for lectures user can still view; returns renewed tokens and revoked list |
 
 Bundle contents: encrypted HLS segments for one rendition, `captions.vtt`, `chapters.json`, and `index.sqlite` (chunks, FTS5, vectors, same logical schema as the server).
 

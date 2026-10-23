@@ -2,6 +2,7 @@
 
 from app.models.bundle import Bundle
 from app.models.course import Course
+from app.models.device import Device, OfflineLicense
 from app.models.enrollment import Enrollment
 from app.models.enums import (
     ChatRole,
@@ -21,6 +22,7 @@ __all__ = [
     "Bundle",
     "ChatRole",
     "Course",
+    "Device",
     "Enrollment",
     "EnrollmentRole",
     "Job",
@@ -29,6 +31,7 @@ __all__ = [
     "Lecture",
     "LectureRendition",
     "LectureStatus",
+    "OfflineLicense",
     "PlaybackProgress",
     "RefreshToken",
     "User",

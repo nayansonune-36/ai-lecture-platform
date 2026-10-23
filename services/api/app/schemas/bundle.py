@@ -22,10 +22,13 @@ class OfflineBundleRequest(BaseModel):
 
 
 class OfflineBundleResponse(BaseModel):
-    """Status and signed download URL for an offline bundle."""
+    """Status, download URL, metadata, and license token for an offline bundle."""
 
     job_id: uuid.UUID
     status: str
     bundle_id: uuid.UUID | None = None
+    size_bytes: int | None = None
+    sha256: str | None = None
     download_url: str | None = None
+    license_token: str | None = None
     expires_at: datetime | None = None

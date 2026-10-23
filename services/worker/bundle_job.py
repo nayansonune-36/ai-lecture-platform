@@ -104,9 +104,7 @@ async def bundle_lecture_job(
             )
             rendition_record = (await session.execute(rend_stmt)).scalar_one_or_none()
             if rendition_record is None:
-                raise ValueError(
-                    f"Rendition {rendition}p does not exist for lecture {lecture_id}"
-                )
+                raise ValueError(f"Rendition {rendition}p does not exist for lecture {lecture_id}")
 
             # 3. Locate or update Job record
             target_job: Job | None = None
@@ -196,9 +194,7 @@ async def bundle_lecture_job(
 
             # 6. Fetch chapters and captions
             chap_stmt = (
-                select(Chapter)
-                .where(Chapter.lecture_id == lecture_uuid)
-                .order_by(Chapter.idx)
+                select(Chapter).where(Chapter.lecture_id == lecture_uuid).order_by(Chapter.idx)
             )
             chapters_db = (await session.execute(chap_stmt)).scalars().all()
             chapters_list = [

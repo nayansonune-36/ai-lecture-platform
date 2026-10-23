@@ -285,9 +285,7 @@ class Chapter(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    __table_args__ = (
-        UniqueConstraint("lecture_id", "idx", name="chapters_lecture_idx_uq"),
-    )
+    __table_args__ = (UniqueConstraint("lecture_id", "idx", name="chapters_lecture_idx_uq"),)
 
 
 class TranscriptSegment(Base):
@@ -311,3 +309,67 @@ class TranscriptSegment(Base):
         UniqueConstraint("lecture_id", "idx", name="transcript_segments_lecture_idx_uq"),
     )
 
+
+class Device(Base):
+    """Registered user device for offline lecture playback."""
+
+    __tablename__ = "devices"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.now(),
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+
+class OfflineLicense(Base):
+    """Offline access license for a lecture on a specific device."""
+
+    __tablename__ = "offline_licenses"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("devices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    lecture_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("lectures.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    rendition: Mapped[int] = mapped_column(Integer, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.now(),
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("device_id", "lecture_id", name="offline_licenses_device_lecture_uq"),
+    )

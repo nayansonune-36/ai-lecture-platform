@@ -6,8 +6,10 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ApiError
+from app.core.errors import ApiError, forbidden
+from app.core.license import issue_license_token
 from app.models.bundle import Bundle
+from app.models.device import Device, OfflineLicense
 from app.models.enums import JobStatus, JobType, LectureStatus
 from app.models.job import Job
 from app.models.lecture import LectureRendition
@@ -86,7 +88,7 @@ async def request_offline_bundle(
     payload: OfflineBundleRequest,
     user: User,
 ) -> OfflineBundleResponse:
-    """Request offline bundle packaging or return existing bundle download URL."""
+    """Request offline bundle packaging or return existing bundle download URL with license."""
     rendition = payload.rendition
     if rendition not in (720, 480, 360):
         raise ApiError(
@@ -95,6 +97,7 @@ async def request_offline_bundle(
             message=f"Invalid rendition height: {rendition}. Must be 720, 480, or 360.",
         )
 
+    # 1. Require can_view_lecture
     lecture = await get_lecture_detail(db, lecture_id, user)
     if lecture.status != LectureStatus.READY:
         raise ApiError(
@@ -103,6 +106,28 @@ async def request_offline_bundle(
             message=f"Lecture is not ready for offline bundling (status: {lecture.status.value})",
         )
 
+    # 2. Require a device owned by the caller and not revoked
+    device: Device | None = None
+    if payload.device_id:
+        device = await db.get(Device, payload.device_id)
+        if device is None or device.user_id != user.id or device.revoked_at is not None:
+            raise forbidden("Device not found, not owned by user, or revoked", code="forbidden")
+    else:
+        # Fallback to an active device of the user or create a default one
+        dev_stmt = (
+            select(Device).where(Device.user_id == user.id, Device.revoked_at.is_(None)).limit(1)
+        )
+        device = (await db.execute(dev_stmt)).scalars().first()
+        if device is None:
+            device = Device(
+                user_id=user.id,
+                name="Default Device",
+                public_key="default-key",
+            )
+            db.add(device)
+            await db.flush()
+
+    # 3. Verify rendition exists
     r_stmt = select(LectureRendition).where(
         LectureRendition.lecture_id == lecture_id,
         LectureRendition.height == rendition,
@@ -115,10 +140,38 @@ async def request_offline_bundle(
             message=f"Rendition {rendition}p not found for lecture {lecture_id}",
         )
 
+    # 4. Create or refresh the offline_licenses row (14 day validity)
+    now = datetime.now(UTC)
+    license_expires_at = now + timedelta(days=14)
+    lic_stmt = select(OfflineLicense).where(
+        OfflineLicense.device_id == device.id,
+        OfflineLicense.lecture_id == lecture.id,
+    )
+    license_row = (await db.execute(lic_stmt)).scalar_one_or_none()
+    if license_row:
+        license_row.user_id = user.id
+        license_row.rendition = rendition
+        license_row.issued_at = now
+        license_row.expires_at = license_expires_at
+        license_row.revoked_at = None
+    else:
+        license_row = OfflineLicense(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            device_id=device.id,
+            lecture_id=lecture.id,
+            rendition=rendition,
+            issued_at=now,
+            expires_at=license_expires_at,
+            revoked_at=None,
+        )
+        db.add(license_row)
+    await db.flush()
+
     settings = get_settings()
     storage_root = settings.resolved_storage_root
 
-    # Check if a bundle exists and is up-to-date
+    # 5. Check if a bundle exists and is up-to-date
     b_stmt = (
         select(Bundle)
         .where(Bundle.lecture_id == lecture_id, Bundle.rendition == rendition)
@@ -136,12 +189,16 @@ async def request_offline_bundle(
             bundle_created = bundle_created.replace(tzinfo=UTC)
 
         if bundle_file.is_file() and lec_updated <= bundle_created:
-            # Bundle exists and is up to date; create or use succeeded job
+            # Bundle exists and is up to date; reuse succeeded job
             job = Job(
                 lecture_id=lecture.id,
                 type=JobType.BUNDLE,
                 status=JobStatus.SUCCEEDED,
-                payload={"rendition": rendition, "bundle_id": str(bundle.id)},
+                payload={
+                    "rendition": rendition,
+                    "bundle_id": str(bundle.id),
+                    "device_id": str(device.id),
+                },
                 started_at=datetime.now(UTC),
                 finished_at=datetime.now(UTC),
             )
@@ -149,30 +206,44 @@ async def request_offline_bundle(
             await db.commit()
             await db.refresh(job)
 
-            expires_at = datetime.now(UTC) + timedelta(minutes=settings.media_url_expire_minutes)
+            media_expires_at = datetime.now(UTC) + timedelta(
+                minutes=settings.media_url_expire_minutes
+            )
             signed_url = generate_signed_media_url(
                 path=f"/media/{bundle.path}",
                 user_id=user.id,
-                expires_at_unix=int(expires_at.timestamp()),
+                expires_at_unix=int(media_expires_at.timestamp()),
                 signing_key=settings.media_signing_key,
+            )
+
+            license_token = issue_license_token(
+                user_id=user.id,
+                device_id=device.id,
+                lecture_id=lecture.id,
+                bundle_sha256=bundle.sha256,
+                issued_at=license_row.issued_at,
+                expires_at=license_row.expires_at,
             )
 
             return OfflineBundleResponse(
                 job_id=job.id,
                 status=JobStatus.SUCCEEDED.value,
                 bundle_id=bundle.id,
+                size_bytes=bundle.size_bytes,
+                sha256=bundle.sha256,
                 download_url=signed_url,
-                expires_at=expires_at,
+                license_token=license_token,
+                expires_at=license_row.expires_at,
             )
 
-    # Need to create/enqueue bundle job
+    # Need to create and enqueue bundle job
     job = Job(
         lecture_id=lecture.id,
         type=JobType.BUNDLE,
         status=JobStatus.QUEUED,
         payload={
             "rendition": rendition,
-            "device_id": str(payload.device_id) if payload.device_id else None,
+            "device_id": str(device.id),
         },
     )
     db.add(job)
@@ -193,7 +264,7 @@ async def get_offline_bundle_status(
     job_id: uuid.UUID,
     user: User,
 ) -> OfflineBundleResponse:
-    """Retrieve offline bundle job status and signed download URL if ready."""
+    """Retrieve offline bundle job status, metadata, signed download URL, and license token."""
     job = await db.get(Job, job_id)
     if job is None or job.type != JobType.BUNDLE:
         raise ApiError(
@@ -206,7 +277,7 @@ async def get_offline_bundle_status(
         # Enforces can_view_lecture (enrollment check)
         await get_lecture_detail(db, job.lecture_id, user)
 
-    if job.status == JobStatus.SUCCEEDED:
+    if job.status == JobStatus.SUCCEEDED and job.lecture_id:
         rendition = job.payload.get("rendition", 480)
         b_stmt = (
             select(Bundle)
@@ -216,19 +287,68 @@ async def get_offline_bundle_status(
         bundle = (await db.execute(b_stmt)).scalars().first()
         if bundle:
             settings = get_settings()
-            expires_at = datetime.now(UTC) + timedelta(minutes=settings.media_url_expire_minutes)
+            media_expires_at = datetime.now(UTC) + timedelta(
+                minutes=settings.media_url_expire_minutes
+            )
             signed_url = generate_signed_media_url(
                 path=f"/media/{bundle.path}",
                 user_id=user.id,
-                expires_at_unix=int(expires_at.timestamp()),
+                expires_at_unix=int(media_expires_at.timestamp()),
                 signing_key=settings.media_signing_key,
             )
+
+            # Issue or fetch license token if device_id is present
+            license_token: str | None = None
+            license_expires: datetime | None = None
+            device_id_str = job.payload.get("device_id")
+            if device_id_str:
+                device_id = uuid.UUID(device_id_str)
+                lic_stmt = select(OfflineLicense).where(
+                    OfflineLicense.device_id == device_id,
+                    OfflineLicense.lecture_id == job.lecture_id,
+                )
+                lic = (await db.execute(lic_stmt)).scalar_one_or_none()
+                if lic and lic.revoked_at is None:
+                    license_token = issue_license_token(
+                        user_id=user.id,
+                        device_id=device_id,
+                        lecture_id=job.lecture_id,
+                        bundle_sha256=bundle.sha256,
+                        issued_at=lic.issued_at,
+                        expires_at=lic.expires_at,
+                    )
+                    license_expires = lic.expires_at
+            else:
+                lic_stmt = (
+                    select(OfflineLicense)
+                    .where(
+                        OfflineLicense.user_id == user.id,
+                        OfflineLicense.lecture_id == job.lecture_id,
+                        OfflineLicense.revoked_at.is_(None),
+                    )
+                    .order_by(OfflineLicense.issued_at.desc())
+                )
+                lic = (await db.execute(lic_stmt)).scalars().first()
+                if lic:
+                    license_token = issue_license_token(
+                        user_id=user.id,
+                        device_id=lic.device_id,
+                        lecture_id=job.lecture_id,
+                        bundle_sha256=bundle.sha256,
+                        issued_at=lic.issued_at,
+                        expires_at=lic.expires_at,
+                    )
+                    license_expires = lic.expires_at
+
             return OfflineBundleResponse(
                 job_id=job.id,
                 status=job.status.value,
                 bundle_id=bundle.id,
+                size_bytes=bundle.size_bytes,
+                sha256=bundle.sha256,
                 download_url=signed_url,
-                expires_at=expires_at,
+                license_token=license_token,
+                expires_at=license_expires,
             )
 
     return OfflineBundleResponse(

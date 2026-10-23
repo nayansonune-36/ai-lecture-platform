@@ -967,6 +967,204 @@
         }
       }
     },
+    "/api/v1/devices": {
+      "get": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "List registered devices",
+        "description": "List all devices belonging to the authenticated user.",
+        "operationId": "get_devices_api_v1_devices_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get Devices Api V1 Devices Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "Register a new device",
+        "description": "Register device with public key. Maximum 3 active devices per user.",
+        "operationId": "create_device_api_v1_devices_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/devices/{id}": {
+      "delete": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "Revoke a device",
+        "description": "Marks device as revoked and invalidates all its offline licenses.",
+        "operationId": "delete_device_api_v1_devices__id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Device Api V1 Devices  Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/license-public-key": {
+      "get": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "Get license verification public key",
+        "description": "Returns Ed25519 public key in PEM format used to verify offline license tokens.",
+        "operationId": "get_license_public_key_api_v1_license_public_key_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensePublicKeyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/offline-licenses/renew": {
+      "post": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "Renew offline licenses for a device",
+        "description": "Extends valid licenses and returns revoked IDs for unavailable lectures.",
+        "operationId": "renew_licenses_api_v1_offline_licenses_renew_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LicenseRenewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseRenewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/lectures/{id}/offline-estimate": {
       "get": {
         "tags": [
@@ -1093,7 +1291,7 @@
           "offline"
         ],
         "summary": "Check offline bundle status",
-        "description": "Returns job status and signed download URL when bundle packaging is complete.",
+        "description": "Returns job status, metadata, signed download URL, and license token.",
         "operationId": "get_bundle_status_api_v1_offline_bundles__job_id__get",
         "security": [
           {
@@ -1654,6 +1852,27 @@
           }
         }
       }
+    },
+    "/license-public-key": {
+      "get": {
+        "tags": [
+          "offline"
+        ],
+        "summary": "Get license verification public key (root alias)",
+        "operationId": "get_license_public_key_root_license_public_key_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensePublicKeyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1883,6 +2102,77 @@
         "type": "object",
         "title": "CourseUpdate",
         "description": "Schema for updating an existing course."
+      },
+      "DeviceCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "public_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Public Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "public_key"
+        ],
+        "title": "DeviceCreate",
+        "description": "Device registration payload."
+      },
+      "DeviceOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "public_key": {
+            "type": "string",
+            "title": "Public Key"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "name",
+          "public_key",
+          "created_at"
+        ],
+        "title": "DeviceOut",
+        "description": "Public device record."
       },
       "EnrollmentAddResponse": {
         "properties": {
@@ -2350,6 +2640,72 @@
         "title": "LectureUpdate",
         "description": "Schema for updating lecture details."
       },
+      "LicensePublicKeyResponse": {
+        "properties": {
+          "public_key": {
+            "type": "string",
+            "title": "Public Key"
+          },
+          "algorithm": {
+            "type": "string",
+            "title": "Algorithm",
+            "default": "Ed25519"
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_key"
+        ],
+        "title": "LicensePublicKeyResponse",
+        "description": "Public key for client-side license verification."
+      },
+      "LicenseRenewRequest": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Device Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_id"
+        ],
+        "title": "LicenseRenewRequest",
+        "description": "License renewal request payload."
+      },
+      "LicenseRenewResponse": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Device Id"
+          },
+          "renewed": {
+            "items": {
+              "$ref": "#/components/schemas/RenewedLicenseOut"
+            },
+            "type": "array",
+            "title": "Renewed"
+          },
+          "revoked": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Revoked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_id",
+          "renewed",
+          "revoked"
+        ],
+        "title": "LicenseRenewResponse",
+        "description": "License renewal outcome listing renewed tokens and revoked lecture ids."
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -2480,6 +2836,28 @@
             ],
             "title": "Bundle Id"
           },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
           "download_url": {
             "anyOf": [
               {
@@ -2490,6 +2868,17 @@
               }
             ],
             "title": "Download Url"
+          },
+          "license_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Token"
           },
           "expires_at": {
             "anyOf": [
@@ -2510,7 +2899,7 @@
           "status"
         ],
         "title": "OfflineBundleResponse",
-        "description": "Status and signed download URL for an offline bundle."
+        "description": "Status, download URL, metadata, and license token for an offline bundle."
       },
       "OfflineEstimateResponse": {
         "properties": {
@@ -2671,6 +3060,32 @@
         ],
         "title": "RefreshResponse",
         "description": "Rotated token response payload."
+      },
+      "RenewedLicenseOut": {
+        "properties": {
+          "lecture_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lecture Id"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lecture_id",
+          "token",
+          "expires_at"
+        ],
+        "title": "RenewedLicenseOut",
+        "description": "Renewed license item."
       },
       "StatusResponse": {
         "properties": {

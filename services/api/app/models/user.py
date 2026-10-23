@@ -13,6 +13,7 @@ from app.models.enums import UserRole
 
 if TYPE_CHECKING:
     from app.models.course import Course
+    from app.models.device import Device
     from app.models.enrollment import Enrollment
     from app.models.lecture import Lecture
     from app.models.playback import PlaybackProgress
@@ -69,6 +70,11 @@ class User(Base):
     )
     playback_progress: Mapped[list["PlaybackProgress"]] = relationship(
         "PlaybackProgress",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    devices: Mapped[list["Device"]] = relationship(
+        "Device",
         back_populates="user",
         cascade="all, delete-orphan",
     )

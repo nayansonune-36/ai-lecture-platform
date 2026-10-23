@@ -322,6 +322,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List registered devices
+         * @description List all devices belonging to the authenticated user.
+         */
+        get: operations["get_devices_api_v1_devices_get"];
+        put?: never;
+        /**
+         * Register a new device
+         * @description Register device with public key. Maximum 3 active devices per user.
+         */
+        post: operations["create_device_api_v1_devices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a device
+         * @description Marks device as revoked and invalidates all its offline licenses.
+         */
+        delete: operations["delete_device_api_v1_devices__id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/license-public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get license verification public key
+         * @description Returns Ed25519 public key in PEM format used to verify offline license tokens.
+         */
+        get: operations["get_license_public_key_api_v1_license_public_key_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/offline-licenses/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Renew offline licenses for a device
+         * @description Extends valid licenses and returns revoked IDs for unavailable lectures.
+         */
+        post: operations["renew_licenses_api_v1_offline_licenses_renew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lectures/{id}/offline-estimate": {
         parameters: {
             query?: never;
@@ -371,7 +455,7 @@ export interface paths {
         };
         /**
          * Check offline bundle status
-         * @description Returns job status and signed download URL when bundle packaging is complete.
+         * @description Returns job status, metadata, signed download URL, and license token.
          */
         get: operations["get_bundle_status_api_v1_offline_bundles__job_id__get"];
         put?: never;
@@ -586,6 +670,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/license-public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get license verification public key (root alias) */
+        get: operations["get_license_public_key_root_license_public_key_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -686,6 +787,43 @@ export interface components {
             term?: string | null;
             /** Archived */
             archived?: boolean | null;
+        };
+        /**
+         * DeviceCreate
+         * @description Device registration payload.
+         */
+        DeviceCreate: {
+            /** Name */
+            name: string;
+            /** Public Key */
+            public_key: string;
+        };
+        /**
+         * DeviceOut
+         * @description Public device record.
+         */
+        DeviceOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Name */
+            name: string;
+            /** Public Key */
+            public_key: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Revoked At */
+            revoked_at?: string | null;
         };
         /**
          * EnrollmentAddResponse
@@ -878,6 +1016,45 @@ export interface components {
             primary_language?: string | null;
         };
         /**
+         * LicensePublicKeyResponse
+         * @description Public key for client-side license verification.
+         */
+        LicensePublicKeyResponse: {
+            /** Public Key */
+            public_key: string;
+            /**
+             * Algorithm
+             * @default Ed25519
+             */
+            algorithm: string;
+        };
+        /**
+         * LicenseRenewRequest
+         * @description License renewal request payload.
+         */
+        LicenseRenewRequest: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+        };
+        /**
+         * LicenseRenewResponse
+         * @description License renewal outcome listing renewed tokens and revoked lecture ids.
+         */
+        LicenseRenewResponse: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Renewed */
+            renewed: components["schemas"]["RenewedLicenseOut"][];
+            /** Revoked */
+            revoked: string[];
+        };
+        /**
          * LoginRequest
          * @description User login request payload.
          */
@@ -943,7 +1120,7 @@ export interface components {
         };
         /**
          * OfflineBundleResponse
-         * @description Status and signed download URL for an offline bundle.
+         * @description Status, download URL, metadata, and license token for an offline bundle.
          */
         OfflineBundleResponse: {
             /**
@@ -955,8 +1132,14 @@ export interface components {
             status: string;
             /** Bundle Id */
             bundle_id?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Sha256 */
+            sha256?: string | null;
             /** Download Url */
             download_url?: string | null;
+            /** License Token */
+            license_token?: string | null;
             /** Expires At */
             expires_at?: string | null;
         };
@@ -1068,6 +1251,24 @@ export interface components {
             expires_in: number;
             /** Refresh Token */
             refresh_token: string;
+        };
+        /**
+         * RenewedLicenseOut
+         * @description Renewed license item.
+         */
+        RenewedLicenseOut: {
+            /**
+             * Lecture Id
+             * Format: uuid
+             */
+            lecture_id: string;
+            /** Token */
+            token: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
         };
         /**
          * StatusResponse
@@ -1778,6 +1979,145 @@ export interface operations {
             };
         };
     };
+    get_devices_api_v1_devices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"][];
+                };
+            };
+        };
+    };
+    create_device_api_v1_devices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_device_api_v1_devices__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_license_public_key_api_v1_license_public_key_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicensePublicKeyResponse"];
+                };
+            };
+        };
+    };
+    renew_licenses_api_v1_offline_licenses_renew_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LicenseRenewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicenseRenewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_bundle_estimate_api_v1_lectures__id__offline_estimate_get: {
         parameters: {
             query?: {
@@ -2203,6 +2543,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadyzResponse"];
+                };
+            };
+        };
+    };
+    get_license_public_key_root_license_public_key_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicensePublicKeyResponse"];
                 };
             };
         };

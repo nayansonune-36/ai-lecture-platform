@@ -6,6 +6,7 @@ from app.db import Base
 from app.models import (
     Bundle,
     Course,
+    Device,
     Enrollment,
     EnrollmentRole,
     Job,
@@ -14,6 +15,7 @@ from app.models import (
     Lecture,
     LectureRendition,
     LectureStatus,
+    OfflineLicense,
     PlaybackProgress,
     User,
     UserRole,
@@ -31,6 +33,8 @@ def test_metadata_contains_required_tables() -> None:
         "playback_progress",
         "jobs",
         "bundles",
+        "devices",
+        "offline_licenses",
     }
     registered_tables = set(Base.metadata.tables.keys())
     assert expected_tables.issubset(registered_tables), (
@@ -149,6 +153,20 @@ def test_model_instantiation() -> None:
         size_bytes=1000000,
         sha256="abc123sha",
     )
+    from datetime import UTC, datetime
+
+    device = Device(
+        user_id=uid,
+        name="Laptop",
+        public_key="device_pub_key",
+    )
+    license_obj = OfflineLicense(
+        user_id=uid,
+        device_id=device.id,
+        lecture_id=lid,
+        rendition=480,
+        expires_at=datetime.now(UTC),
+    )
 
     assert user.role == UserRole.STUDENT
     assert course.code == "CS101"
@@ -159,3 +177,5 @@ def test_model_instantiation() -> None:
     assert job.type == JobType.TRANSCODE
     assert bundle.rendition == 480
     assert bundle.version == 1
+    assert device.name == "Laptop"
+    assert license_obj.rendition == 480

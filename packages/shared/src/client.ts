@@ -40,6 +40,15 @@ export type PlaybackTokenResponse = components["schemas"]["PlaybackTokenResponse
 export type ChapterOut = components["schemas"]["ChapterOut"];
 export type PlaybackProgressOut = components["schemas"]["PlaybackProgressOut"];
 export type PlaybackProgressUpdate = components["schemas"]["PlaybackProgressUpdate"];
+export type DeviceCreate = components["schemas"]["DeviceCreate"];
+export type DeviceOut = components["schemas"]["DeviceOut"];
+export type LicenseRenewRequest = components["schemas"]["LicenseRenewRequest"];
+export type LicenseRenewResponse = components["schemas"]["LicenseRenewResponse"];
+export type RenewedLicenseOut = components["schemas"]["RenewedLicenseOut"];
+export type LicensePublicKeyResponse = components["schemas"]["LicensePublicKeyResponse"];
+export type OfflineBundleRequest = components["schemas"]["OfflineBundleRequest"];
+export type OfflineBundleResponse = components["schemas"]["OfflineBundleResponse"];
+export type OfflineEstimateResponse = components["schemas"]["OfflineEstimateResponse"];
 
 export class ApiError extends Error {
   public status: number;
@@ -329,6 +338,52 @@ export class ApiClient {
       this.request<PlaybackProgressOut>(`/lectures/${lectureId}/progress`, {
         method: "PUT",
         body: JSON.stringify(body),
+      }),
+  };
+
+  // --- Device & Offline endpoints ---
+  public offline = {
+    getDevices: (): Promise<DeviceOut[]> =>
+      this.request<DeviceOut[]>("/devices", {
+        method: "GET",
+      }),
+
+    registerDevice: (body: DeviceCreate): Promise<DeviceOut> =>
+      this.request<DeviceOut>("/devices", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
+    revokeDevice: (deviceId: string): Promise<StatusResponse> =>
+      this.request<StatusResponse>(`/devices/${deviceId}`, {
+        method: "DELETE",
+      }),
+
+    getLicensePublicKey: (): Promise<LicensePublicKeyResponse> =>
+      this.request<LicensePublicKeyResponse>("/license-public-key", {
+        method: "GET",
+      }),
+
+    renewLicenses: (body: LicenseRenewRequest): Promise<LicenseRenewResponse> =>
+      this.request<LicenseRenewResponse>("/offline-licenses/renew", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
+    getOfflineEstimate: (lectureId: string, rendition: number = 480): Promise<OfflineEstimateResponse> =>
+      this.request<OfflineEstimateResponse>(`/lectures/${lectureId}/offline-estimate?rendition=${rendition}`, {
+        method: "GET",
+      }),
+
+    requestOfflineBundle: (lectureId: string, body: OfflineBundleRequest): Promise<OfflineBundleResponse> =>
+      this.request<OfflineBundleResponse>(`/lectures/${lectureId}/offline-bundle`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
+    getOfflineBundleStatus: (jobId: string): Promise<OfflineBundleResponse> =>
+      this.request<OfflineBundleResponse>(`/offline-bundles/${jobId}`, {
+        method: "GET",
       }),
   };
 }

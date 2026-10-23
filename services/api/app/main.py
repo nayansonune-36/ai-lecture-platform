@@ -7,8 +7,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.core.errors import ApiError
+from app.core.license import get_public_key_pem
 from app.db import engine
 from app.routers import auth, courses, health, lectures, media, offline, playback
+from app.schemas.device import LicensePublicKeyResponse
 
 
 @asynccontextmanager
@@ -72,5 +74,18 @@ app.include_router(health.router, prefix="/api/v1")
 # Media delivery with signed token verification and Range support
 app.include_router(media.router)
 
-# Also mount health at root for container orchestration probes
+# Also mount health and license public key at root
 app.include_router(health.router)
+
+
+@app.get(
+    "/license-public-key",
+    response_model=LicensePublicKeyResponse,
+    summary="Get license verification public key (root alias)",
+    tags=["offline"],
+)
+async def get_license_public_key_root() -> LicensePublicKeyResponse:
+    return LicensePublicKeyResponse(
+        public_key=get_public_key_pem(),
+        algorithm="Ed25519",
+    )
