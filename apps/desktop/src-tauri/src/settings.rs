@@ -143,7 +143,7 @@ mod tests {
             .as_secs() as i64;
 
         // 1. Initial state: no rollback
-        assert_eq!(check_clock_rollback(conn).unwrap(), false);
+        assert!(!check_clock_rollback(conn).unwrap());
         let max_seen = get_max_seen_timestamp(conn).unwrap().unwrap();
         assert!(max_seen >= now);
 
@@ -153,11 +153,11 @@ mod tests {
         assert_eq!(get_max_seen_timestamp(conn).unwrap(), Some(future_time));
 
         // 3. Now checking rollback detects that current system clock (now) < future_time
-        assert_eq!(check_clock_rollback(conn).unwrap(), true);
+        assert!(check_clock_rollback(conn).unwrap());
 
         // 4. Server sync provides authoritative current timestamp, resetting the lock
         set_max_seen_timestamp_authoritative(conn, now).unwrap();
-        assert_eq!(check_clock_rollback(conn).unwrap(), false);
+        assert!(!check_clock_rollback(conn).unwrap());
     }
 
     #[test]

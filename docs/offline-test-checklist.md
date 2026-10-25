@@ -137,3 +137,16 @@ This document details the manual testing procedure for validating the offline-fi
      - Deletes all encrypted bundles in `%LOCALAPPDATA%/desktop/bundles/`.
      - Clears `downloads`, `licenses`, and `progress_queue` SQLite tables.
      - Leaves zero residual media on the machine.
+
+---
+
+### Test 9: Uninstall & Reinstall Behavior
+- [ ] Ensure lecture bundles exist in `%LOCALAPPDATA%/desktop/bundles/`.
+- [ ] Uninstall the Tauri desktop application via Windows Settings / Control Panel (or remove application build artifacts).
+- [ ] Verify application data cleanup:
+  - If user selected complete removal, check that `%LOCALAPPDATA%/desktop/` is deleted.
+  - Check Windows Credential Manager (`cmdkey /list` or Credential Manager GUI) to verify `tauri_device_identity` entries are removed if uninstallation unregisters credentials.
+- [ ] Reinstall the application:
+  - Launch app: prompt for Server Address appears.
+  - Device identity is freshly generated (or re-linked upon login if credentials preserved).
+  - Register new device / login and verify license issuance conforms to device limit (maximum 3 active devices per user).

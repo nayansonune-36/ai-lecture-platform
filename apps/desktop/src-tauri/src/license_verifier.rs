@@ -505,8 +505,8 @@ mod tests {
         .unwrap();
 
         let status_7d = get_license_status(conn, "lec-7d");
-        assert_eq!(status_7d.is_valid, true);
-        assert_eq!(status_7d.is_expired, false);
+        assert!(status_7d.is_valid);
+        assert!(!status_7d.is_expired);
         assert_eq!(status_7d.days_left, Some(7));
 
         // 2. License expired 1 hour ago
@@ -532,8 +532,8 @@ mod tests {
         .unwrap();
 
         let status_exp = get_license_status(conn, "lec-exp");
-        assert_eq!(status_exp.is_valid, false);
-        assert_eq!(status_exp.is_expired, true);
+        assert!(!status_exp.is_valid);
+        assert!(status_exp.is_expired);
         assert_eq!(status_exp.days_left, Some(0));
 
         // 3. Revoked license
@@ -543,8 +543,8 @@ mod tests {
         )
         .unwrap();
         let status_revoked = get_license_status(conn, "lec-7d");
-        assert_eq!(status_revoked.is_valid, false);
-        assert_eq!(status_revoked.is_expired, true);
+        assert!(!status_revoked.is_valid);
+        assert!(status_revoked.is_expired);
         assert_eq!(status_revoked.days_left, Some(0));
     }
 
@@ -609,7 +609,7 @@ mod tests {
 
         // License status reports expired
         let status = get_license_status(conn, "lec-rollback");
-        assert_eq!(status.is_expired, true);
+        assert!(status.is_expired);
         assert_eq!(status.days_left, Some(0));
 
         // When app syncs with server, authoritative timestamp is reset to current server time
