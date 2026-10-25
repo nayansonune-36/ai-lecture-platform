@@ -20,22 +20,34 @@ pub fn get_or_create_device_identity_with_service(
     let mut pub_key = settings::get_device_public_key(conn).map_err(|e| e.to_string())?;
     let priv_key_bytes = keyring_store::get_device_private_key(service_name)?;
 
-    if pub_key.is_none() || priv_key_bytes.is_none() {
-        let mut csprng = OsRng;
-        let signing_key = SigningKey::generate(&mut csprng);
-        let verifying_key: VerifyingKey = signing_key.verifying_key();
+    match priv_key_bytes {
+        Some(sec_bytes) => {
+            let signing_key = SigningKey::from_bytes(&sec_bytes);
+            let verifying_key: VerifyingKey = signing_key.verifying_key();
+            let pub_hex = hex::encode(verifying_key.to_bytes());
+            if pub_key.as_deref() != Some(&pub_hex) {
+                settings::set_device_public_key(conn, &pub_hex)
+                    .map_err(|e| format!("Failed to save device public key: {}", e))?;
+                pub_key = Some(pub_hex);
+            }
+        }
+        None => {
+            let mut csprng = OsRng;
+            let signing_key = SigningKey::generate(&mut csprng);
+            let verifying_key: VerifyingKey = signing_key.verifying_key();
 
-        let sec_bytes = signing_key.to_bytes();
-        let pub_hex = hex::encode(verifying_key.to_bytes());
+            let sec_bytes = signing_key.to_bytes();
+            let pub_hex = hex::encode(verifying_key.to_bytes());
 
-        // Store 32 bytes in base64 in Windows Credential Manager
-        keyring_store::store_device_private_key(service_name, &sec_bytes)?;
+            // Store 32 bytes in base64 in Windows Credential Manager
+            keyring_store::store_device_private_key(service_name, &sec_bytes)?;
 
-        // Store public key in SQLite settings
-        settings::set_device_public_key(conn, &pub_hex)
-            .map_err(|e| format!("Failed to save device public key: {}", e))?;
+            // Store public key in SQLite settings
+            settings::set_device_public_key(conn, &pub_hex)
+                .map_err(|e| format!("Failed to save device public key: {}", e))?;
 
-        pub_key = Some(pub_hex);
+            pub_key = Some(pub_hex);
+        }
     }
 
     let mut name = settings::get_device_name(conn).map_err(|e| e.to_string())?;
