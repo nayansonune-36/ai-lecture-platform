@@ -76,7 +76,7 @@ This document details the manual testing procedure for validating the offline-fi
 ---
 
 ### Test 5: License Expiration & Playback Lock
-- [ ] Close player and locate the lecture's license token in SQLite:
+- [ ] Set `LICENSE_TTL_SECONDS=180` in `.env` (for a 3-minute expiration cycle) and restart the API, or simulate by updating SQLite:
   ```powershell
   sqlite3 "$env:LOCALAPPDATA/desktop/offline.db" "UPDATE licenses SET expires_at = datetime('now', '-1 day');"
   ```

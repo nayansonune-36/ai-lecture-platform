@@ -53,7 +53,7 @@ pub fn encrypt_file(
     let num_chunks = if file_len == 0 {
         1
     } else {
-        ((file_len + (chunk_size as u64) - 1) / (chunk_size as u64)) as u32
+        file_len.div_ceil(chunk_size as u64) as u32
     };
 
     let mut dst = File::create(dst_path).map_err(|e| format!("Failed to create dst: {}", e))?;

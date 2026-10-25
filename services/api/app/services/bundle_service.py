@@ -140,9 +140,10 @@ async def request_offline_bundle(
             message=f"Rendition {rendition}p not found for lecture {lecture_id}",
         )
 
-    # 4. Create or refresh the offline_licenses row (14 day validity)
+    # 4. Create or refresh the offline_licenses row
     now = datetime.now(UTC)
-    license_expires_at = now + timedelta(days=14)
+    settings = get_settings()
+    license_expires_at = now + timedelta(seconds=settings.license_ttl_seconds)
     lic_stmt = select(OfflineLicense).where(
         OfflineLicense.device_id == device.id,
         OfflineLicense.lecture_id == lecture.id,

@@ -41,6 +41,8 @@ class Settings(BaseSettings):
 
     # Offline License Signing (Ed25519 PKCS8 PEM or seed)
     license_signing_key: str = ""
+    # Dev-only setting for testing license expiry quickly (default 14 days in seconds)
+    license_ttl_seconds: int = 14 * 24 * 3600
 
     # AI Models (Ollama)
     ollama_base_url: str = "http://localhost:11434"

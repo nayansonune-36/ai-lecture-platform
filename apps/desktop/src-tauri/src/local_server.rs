@@ -298,7 +298,7 @@ async fn handle_playback(
             )
                 .into_response();
             add_cors_headers(&mut res, origin_opt);
-            return res;
+            res
         }
     }
 }

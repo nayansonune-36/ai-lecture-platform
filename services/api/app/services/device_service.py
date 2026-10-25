@@ -22,6 +22,7 @@ from app.schemas.device import (
     LicenseRenewResponse,
     RenewedLicenseOut,
 )
+from app.settings import get_settings
 
 
 async def register_device(
@@ -151,7 +152,8 @@ async def renew_offline_licenses(
     revoked: list[uuid.UUID] = []
 
     now = datetime.now(UTC)
-    new_expires_at = now + timedelta(days=14)
+    settings = get_settings()
+    new_expires_at = now + timedelta(seconds=settings.license_ttl_seconds)
 
     for lic in licenses:
         can_view = await check_user_can_view_lecture(db, lic.lecture_id, user)
