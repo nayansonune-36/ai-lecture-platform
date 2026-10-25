@@ -8,6 +8,10 @@ storage/
 storage/*
 !storage/.gitkeep
 
+# Rust & Tauri
+target/
+**/src-tauri/target/
+
 # Node & Frontend
 node_modules/
 dist/
