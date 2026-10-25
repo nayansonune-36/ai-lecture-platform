@@ -65,6 +65,14 @@ pub fn set_device_public_key(conn: &Connection, key: &str) -> Result<()> {
     set_setting(conn, "device_public_key", key)
 }
 
+pub fn get_license_public_key(conn: &Connection) -> Result<Option<String>> {
+    get_setting(conn, "license_public_key")
+}
+
+pub fn set_license_public_key(conn: &Connection, key_pem: &str) -> Result<()> {
+    set_setting(conn, "license_public_key", key_pem)
+}
+
 pub fn get_last_user(conn: &Connection) -> Result<Option<UserProfile>> {
     if let Some(json_str) = get_setting(conn, "last_user")? {
         if let Ok(user) = serde_json::from_str::<UserProfile>(&json_str) {

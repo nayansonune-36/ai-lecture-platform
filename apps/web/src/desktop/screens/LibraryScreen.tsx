@@ -6,6 +6,7 @@ interface LibraryScreenProps {
   user: UserProfile;
   onOpenSettings: () => void;
   onSignOut: () => void;
+  onPlayLecture?: (lectureId: string) => void;
 }
 
 function formatDuration(ms?: number | null): string {
@@ -37,6 +38,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   user,
   onOpenSettings,
   onSignOut,
+  onPlayLecture,
 }) => {
   const {
     courses,
@@ -310,18 +312,35 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
 
                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                 {isCompleted ? (
-                                  <span
-                                    style={{
-                                      padding: "4px 10px",
-                                      backgroundColor: "#dcfce7",
-                                      color: "#15803d",
-                                      borderRadius: "9999px",
-                                      fontSize: "12px",
-                                      fontWeight: "600",
-                                    }}
-                                  >
-                                    Downloaded
-                                  </span>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span
+                                      style={{
+                                        padding: "4px 10px",
+                                        backgroundColor: "#dcfce7",
+                                        color: "#15803d",
+                                        borderRadius: "9999px",
+                                        fontSize: "12px",
+                                        fontWeight: "600",
+                                      }}
+                                    >
+                                      Downloaded
+                                    </span>
+                                    <button
+                                      onClick={() => onPlayLecture?.(lec.id)}
+                                      style={{
+                                        padding: "6px 12px",
+                                        backgroundColor: "#16a34a",
+                                        color: "#ffffff",
+                                        border: "none",
+                                        borderRadius: "6px",
+                                        fontSize: "12px",
+                                        fontWeight: "500",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      Watch Offline
+                                    </button>
+                                  </div>
                                 ) : isDownloading ? (
                                   <>
                                     <button
@@ -554,7 +573,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                       <span
                         style={{
                           fontSize: "12px",
@@ -567,6 +586,21 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                       >
                         Encrypted
                       </span>
+                      <button
+                        onClick={() => onPlayLecture?.(dl.lecture_id)}
+                        style={{
+                          padding: "6px 14px",
+                          backgroundColor: "#2563eb",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          fontWeight: "500",
+                        }}
+                      >
+                        Watch Offline
+                      </button>
                       <button
                         onClick={() => deleteDownload(dl.lecture_id)}
                         style={{

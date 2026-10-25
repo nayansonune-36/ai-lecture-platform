@@ -4,14 +4,16 @@ import { ServerSetupScreen } from "./screens/ServerSetupScreen.js";
 import { LoginScreen } from "./screens/LoginScreen.js";
 import { LibraryScreen } from "./screens/LibraryScreen.js";
 import { SettingsScreen } from "./screens/SettingsScreen.js";
+import { OfflinePlayerScreen } from "./screens/OfflinePlayerScreen.js";
 import type { UserProfile } from "./types.js";
 
-type DesktopScreen = "server_setup" | "login" | "library" | "settings";
+type DesktopScreen = "server_setup" | "login" | "library" | "settings" | "player";
 
 export const DesktopApp: React.FC = () => {
   const { state, loading, refresh } = useDesktopState();
   const [currentScreen, setCurrentScreen] = useState<DesktopScreen | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [selectedLectureId, setSelectedLectureId] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (!loading && state) {
@@ -63,6 +65,11 @@ export const DesktopApp: React.FC = () => {
     setCurrentScreen("login");
   };
 
+  const handlePlayLecture = (lectureId: string) => {
+    setSelectedLectureId(lectureId);
+    setCurrentScreen("player");
+  };
+
   switch (currentScreen) {
     case "server_setup":
       return (
@@ -89,6 +96,21 @@ export const DesktopApp: React.FC = () => {
         />
       );
 
+    case "player":
+      if (!selectedLectureId) {
+        setCurrentScreen("library");
+        return null;
+      }
+      return (
+        <OfflinePlayerScreen
+          lectureId={selectedLectureId}
+          onBack={() => {
+            setSelectedLectureId(null);
+            setCurrentScreen("library");
+          }}
+        />
+      );
+
     case "library":
     default:
       if (!currentUser) {
@@ -106,6 +128,7 @@ export const DesktopApp: React.FC = () => {
           user={currentUser}
           onOpenSettings={() => setCurrentScreen("settings")}
           onSignOut={handleSignOut}
+          onPlayLecture={handlePlayLecture}
         />
       );
   }

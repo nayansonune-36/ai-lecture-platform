@@ -22,7 +22,11 @@ const queryClient = new QueryClient({
 
 export function App() {
   if (isDesktop()) {
-    return <DesktopApp />;
+    return (
+      <I18nProvider>
+        <DesktopApp />
+      </I18nProvider>
+    );
   }
 
   return (

@@ -71,6 +71,32 @@ export interface DownloadProgressEvent {
   error?: string | null;
 }
 
+export interface ChapterItem {
+  id?: string;
+  lecture_id?: string;
+  title: string;
+  summary?: string;
+  start_ms: number;
+  end_ms?: number;
+}
+
+export interface OfflinePlaybackInfo {
+  lecture_id: string;
+  lecture_title: string;
+  course_title: string;
+  manifest_url: string;
+  poster_url: string | null;
+  captions_url: string | null;
+  chapters_url: string | null;
+  initial_position_ms: number;
+}
+
+export interface LocalServerInfo {
+  port: number;
+  session_token: string;
+  base_url: string;
+}
+
 export interface DesktopSettingsInfo {
   server_url: string;
   device_name: string;

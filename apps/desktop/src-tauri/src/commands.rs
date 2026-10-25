@@ -18,6 +18,27 @@ pub struct AppState {
     pub app_data_dir: PathBuf,
     pub access_token: Mutex<Option<String>>,
     pub active_downloads: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    pub local_server_port: u16,
+    pub session_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalServerInfo {
+    pub port: u16,
+    pub session_token: String,
+    pub base_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OfflinePlaybackInfo {
+    pub lecture_id: String,
+    pub lecture_title: String,
+    pub course_title: String,
+    pub manifest_url: String,
+    pub poster_url: Option<String>,
+    pub captions_url: Option<String>,
+    pub chapters_url: Option<String>,
+    pub initial_position_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,6 +128,20 @@ pub async fn validate_and_set_server_url(
         let db = state.db.lock().map_err(|e| e.to_string())?;
         settings::set_server_url(db.conn(), &cleaned)
             .map_err(|e| format!("Failed to save server URL: {}", e))?;
+    }
+
+    // Pin server license verification public key at first contact (no Mutex held across await)
+    let pub_key_url = format!("{}/api/v1/license-public-key", cleaned);
+    if let Ok(pk_res) = client.get(&pub_key_url).send().await {
+        if pk_res.status().is_success() {
+            if let Ok(json) = pk_res.json::<serde_json::Value>().await {
+                if let Some(pub_pem) = json.get("public_key").and_then(|v| v.as_str()) {
+                    if let Ok(db) = state.db.lock() {
+                        let _ = settings::set_license_public_key(db.conn(), pub_pem);
+                    }
+                }
+            }
+        }
     }
 
     Ok(ServerValidationResponse {
@@ -730,4 +765,131 @@ pub fn update_desktop_settings(
 
     drop(db);
     storage_usage(state)
+}
+
+#[tauri::command]
+pub fn get_local_server_info(state: State<'_, AppState>) -> Result<LocalServerInfo, String> {
+    Ok(LocalServerInfo {
+        port: state.local_server_port,
+        session_token: state.session_token.clone(),
+        base_url: format!("http://127.0.0.1:{}/{}", state.local_server_port, state.session_token),
+    })
+}
+
+#[tauri::command]
+pub fn get_offline_playback_info(
+    state: State<'_, AppState>,
+    lecture_id: String,
+) -> Result<OfflinePlaybackInfo, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = db.conn();
+
+    // 1. Check download record
+    let mut stmt = conn
+        .prepare("SELECT lecture_title, course_title, status FROM downloads WHERE lecture_id = ?1")
+        .map_err(|e| e.to_string())?;
+
+    let row = stmt
+        .query_row([&lecture_id], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|_| format!("Lecture {} has not been downloaded", lecture_id))?;
+
+    let (lecture_title, course_title, status) = row;
+    if status != "completed" {
+        return Err(format!("Download is not complete (current status: {})", status));
+    }
+
+    // 2. Check license exists and is not revoked
+    let mut lic_stmt = conn
+        .prepare("SELECT revoked_at FROM licenses WHERE lecture_id = ?1")
+        .map_err(|e| e.to_string())?;
+    let revoked: Option<String> = lic_stmt
+        .query_row([&lecture_id], |r| r.get(0))
+        .map_err(|_| format!("No license found for lecture {}", lecture_id))?;
+    if revoked.is_some() {
+        return Err("License for this lecture has been revoked".to_string());
+    }
+
+    // 3. Get initial playback progress position
+    let mut prog_stmt = conn
+        .prepare("SELECT position_ms FROM progress_queue WHERE lecture_id = ?1 ORDER BY id DESC LIMIT 1")
+        .map_err(|e| e.to_string())?;
+    let initial_position_ms: i64 = prog_stmt
+        .query_row([&lecture_id], |r| r.get(0))
+        .unwrap_or(0);
+
+    let base = format!(
+        "http://127.0.0.1:{}/{}/lectures/{}",
+        state.local_server_port, state.session_token, lecture_id
+    );
+
+    let bundle_dir = state.app_data_dir.join("bundles").join(&lecture_id);
+
+    let poster_url = if bundle_dir.join("poster.jpg.enc").exists() {
+        Some(format!("{}/poster.jpg", base))
+    } else {
+        None
+    };
+
+    let captions_url = if bundle_dir.join("captions.vtt.enc").exists() {
+        Some(format!("{}/captions.vtt", base))
+    } else {
+        None
+    };
+
+    let chapters_url = if bundle_dir.join("chapters.json.enc").exists() {
+        Some(format!("{}/chapters.json", base))
+    } else {
+        None
+    };
+
+    Ok(OfflinePlaybackInfo {
+        lecture_id,
+        lecture_title,
+        course_title,
+        manifest_url: format!("{}/hls/master.m3u8", base),
+        poster_url,
+        captions_url,
+        chapters_url,
+        initial_position_ms,
+    })
+}
+
+#[tauri::command]
+pub fn save_offline_progress(
+    state: State<'_, AppState>,
+    lecture_id: String,
+    position_ms: i64,
+    completed: bool,
+) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.conn()
+        .execute(
+            r#"
+            INSERT INTO progress_queue (lecture_id, position_ms, completed, timestamp, attempts)
+            VALUES (?1, ?2, ?3, datetime('now'), 0)
+            "#,
+            rusqlite::params![lecture_id, position_ms, if completed { 1 } else { 0 }],
+        )
+        .map_err(|e| format!("Failed to save progress: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_offline_progress(
+    state: State<'_, AppState>,
+    lecture_id: String,
+) -> Result<i64, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .conn()
+        .prepare("SELECT position_ms FROM progress_queue WHERE lecture_id = ?1 ORDER BY id DESC LIMIT 1")
+        .map_err(|e| e.to_string())?;
+    let pos: Result<i64, _> = stmt.query_row([&lecture_id], |r| r.get(0));
+    Ok(pos.unwrap_or(0))
 }

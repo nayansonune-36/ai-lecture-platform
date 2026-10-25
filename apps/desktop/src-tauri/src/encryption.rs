@@ -228,6 +228,20 @@ pub fn decrypt_range(
     Ok(output)
 }
 
+pub fn get_original_file_len(enc_path: &Path) -> Result<u64, String> {
+    let mut file = File::open(enc_path).map_err(|e| format!("Failed to open enc file: {}", e))?;
+    let mut header = [0u8; HEADER_SIZE];
+    file.read_exact(&mut header)
+        .map_err(|e| format!("Failed to read header: {}", e))?;
+
+    if &header[0..8] != HEADER_MAGIC {
+        return Err("Invalid file magic in encrypted header".to_string());
+    }
+
+    let original_len = u64::from_le_bytes(header[16..24].try_into().unwrap());
+    Ok(original_len)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

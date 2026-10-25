@@ -9,6 +9,8 @@ import type {
   DownloadRecord,
   DownloadProgressEvent,
   DesktopSettingsInfo,
+  OfflinePlaybackInfo,
+  LocalServerInfo,
 } from "../types.js";
 
 export const desktopService = {
@@ -95,6 +97,34 @@ export const desktopService = {
       }
     );
     return unlisten;
+  },
+
+  async getLocalServerInfo(): Promise<LocalServerInfo> {
+    return invoke<LocalServerInfo>("get_local_server_info");
+  },
+
+  async getOfflinePlaybackInfo(
+    lectureId: string
+  ): Promise<OfflinePlaybackInfo> {
+    return invoke<OfflinePlaybackInfo>("get_offline_playback_info", {
+      lectureId,
+    });
+  },
+
+  async saveOfflineProgress(
+    lectureId: string,
+    positionMs: number,
+    completed: boolean
+  ): Promise<void> {
+    return invoke<void>("save_offline_progress", {
+      lectureId,
+      positionMs,
+      completed,
+    });
+  },
+
+  async getOfflineProgress(lectureId: string): Promise<number> {
+    return invoke<number>("get_offline_progress", { lectureId });
   },
 
   async getSettings(): Promise<DesktopSettingsInfo> {
