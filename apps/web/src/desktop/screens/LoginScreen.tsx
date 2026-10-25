@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useDesktopAuth } from "../hooks/useDesktopAuth.js";
+import { desktopService } from "../services/desktopService.js";
 import type { UserProfile } from "../types.js";
 
 interface LoginScreenProps {
@@ -25,6 +26,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     error,
     handleLogin,
   } = useDesktopAuth(lastUser);
+
+  const [offlineLoading, setOfflineLoading] = useState(false);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+
+  const handleOfflineLogin = async () => {
+    setOfflineLoading(true);
+    setOfflineError(null);
+    try {
+      const res = await desktopService.offlineLogin();
+      onLoginSuccess(res.user);
+    } catch (err) {
+      setOfflineError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOfflineLoading(false);
+    }
+  };
 
   React.useEffect(() => {
     if (user) {
@@ -79,17 +96,61 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         </div>
 
         {lastUser && (
+          <div style={{ marginBottom: "16px" }}>
+            <div
+              style={{
+                padding: "12px",
+                backgroundColor: "#eff6ff",
+                borderRadius: "6px",
+                border: "1px solid #bfdbfe",
+              }}
+            >
+              <div style={{ fontSize: "13px", color: "#1e40af", marginBottom: "8px" }}>
+                Remembered user: <strong>{lastUser.name}</strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleOfflineLogin()}
+                disabled={offlineLoading || loading}
+                style={{
+                  width: "100%",
+                  padding: "8px 14px",
+                  backgroundColor: "#2563eb",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                  cursor: offlineLoading ? "not-allowed" : "pointer",
+                }}
+              >
+                {offlineLoading ? "Checking offline licenses..." : `Continue Offline as ${lastUser.name}`}
+              </button>
+              <div style={{ fontSize: "11px", color: "#6b7280", marginTop: "6px", textAlign: "center" }}>
+                Offline mode • No password required
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "16px 0" }}>
+              <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+              <span style={{ fontSize: "12px", color: "#9ca3af" }}>or sign in with password</span>
+              <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+            </div>
+          </div>
+        )}
+
+        {offlineError && (
           <div
             style={{
-              padding: "10px 12px",
-              backgroundColor: "#f3f4f6",
+              padding: "12px",
+              backgroundColor: "#fee2e2",
+              color: "#b91c1c",
               borderRadius: "6px",
-              fontSize: "13px",
-              color: "#4b5563",
+              fontSize: "14px",
               marginBottom: "16px",
             }}
           >
-            Last signed in as <strong>{lastUser.name}</strong> ({lastUser.email})
+            {offlineError}
           </div>
         )}
 

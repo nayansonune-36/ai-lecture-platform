@@ -70,6 +70,10 @@ pub fn run() {
             commands::get_offline_playback_info,
             commands::save_offline_progress,
             commands::get_offline_progress,
+            commands::check_connectivity,
+            commands::sync_offline_licenses,
+            commands::desktop_offline_login,
+            commands::flush_progress_queue,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

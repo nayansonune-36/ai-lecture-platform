@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { useLibrary } from "../hooks/useLibrary.js";
+import { useConnectivity } from "../hooks/useConnectivity.js";
 import type { UserProfile } from "../types.js";
 
 interface LibraryScreenProps {
   user: UserProfile;
   onOpenSettings: () => void;
-  onSignOut: () => void;
+  onSignOut: (wipeDownloads?: boolean) => void;
   onPlayLecture?: (lectureId: string) => void;
 }
 
@@ -58,6 +59,20 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
     deleteDownload,
   } = useLibrary(true);
 
+  const { isOnline, rollbackDetected, checking, syncing, checkNow, syncNow } = useConnectivity();
+  const [revocationNotice, setRevocationNotice] = useState<string | null>(null);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+
+  const handleManualSync = async () => {
+    const res = await syncNow();
+    if (res) {
+      if (res.revoked_count > 0 && res.revoked_titles.length > 0) {
+        setRevocationNotice(res.revoked_titles.join(", "));
+      }
+      void refresh();
+    }
+  };
+
   return (
     <div
       style={{
@@ -68,6 +83,92 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
         fontFamily: "system-ui, -apple-system, sans-serif",
       }}
     >
+      {/* Top Connectivity Banner */}
+      {!isOnline && (
+        <div
+          style={{
+            backgroundColor: "#fef3c7",
+            color: "#92400e",
+            padding: "10px 24px",
+            fontSize: "13px",
+            fontWeight: "500",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderBottom: "1px solid #fde68a",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>⚠️</span>
+            <span>
+              <strong>Offline Mode:</strong> Server is unreachable. You can continue watching downloaded lectures.
+            </span>
+          </div>
+          <button
+            onClick={() => void checkNow()}
+            disabled={checking}
+            style={{
+              padding: "4px 10px",
+              backgroundColor: "#ffffff",
+              border: "1px solid #d97706",
+              borderRadius: "4px",
+              fontSize: "12px",
+              color: "#b45309",
+              cursor: checking ? "not-allowed" : "pointer",
+              fontWeight: "500",
+            }}
+          >
+            {checking ? "Checking..." : "Retry Connection"}
+          </button>
+        </div>
+      )}
+
+      {rollbackDetected && (
+        <div
+          style={{
+            backgroundColor: "#fee2e2",
+            color: "#991b1b",
+            padding: "10px 24px",
+            fontSize: "13px",
+            fontWeight: "500",
+            borderBottom: "1px solid #fecaca",
+          }}
+        >
+          ⛔ <strong>Clock Rollback Detected:</strong> System clock is earlier than latest verified server time. Offline playback is locked until you connect to the server and sync.
+        </div>
+      )}
+
+      {revocationNotice && (
+        <div
+          style={{
+            backgroundColor: "#fee2e2",
+            color: "#991b1b",
+            padding: "10px 24px",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderBottom: "1px solid #fecaca",
+          }}
+        >
+          <div>
+            ⚠️ <strong>License Revoked:</strong> The following lectures were revoked by the server and removed: <strong>{revocationNotice}</strong>
+          </div>
+          <button
+            onClick={() => setRevocationNotice(null)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#991b1b",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <header
         style={{
@@ -95,9 +196,58 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           >
             Desktop
           </span>
+          {isOnline ? (
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "2px 8px",
+                backgroundColor: "#dcfce7",
+                color: "#166534",
+                borderRadius: "9999px",
+                fontWeight: "600",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <span style={{ fontSize: "8px" }}>●</span> Online
+            </span>
+          ) : (
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "2px 8px",
+                backgroundColor: "#fef3c7",
+                color: "#92400e",
+                borderRadius: "9999px",
+                fontWeight: "600",
+              }}
+            >
+              Offline
+            </span>
+          )}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          {isOnline && (
+            <button
+              onClick={() => void handleManualSync()}
+              disabled={syncing}
+              style={{
+                padding: "6px 12px",
+                backgroundColor: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: "6px",
+                fontSize: "13px",
+                color: "#166534",
+                cursor: syncing ? "not-allowed" : "pointer",
+                fontWeight: "500",
+              }}
+            >
+              {syncing ? "Syncing..." : "Sync Licenses"}
+            </button>
+          )}
+
           <span style={{ fontSize: "14px", color: "#4b5563" }}>
             Signed in as <strong>{user.name}</strong>
           </span>
@@ -116,7 +266,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             Settings
           </button>
           <button
-            onClick={onSignOut}
+            onClick={() => setShowSignOutModal(true)}
             style={{
               padding: "6px 12px",
               backgroundColor: "#ffffff",
@@ -131,6 +281,94 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           </button>
         </div>
       </header>
+
+      {/* Sign Out Modal */}
+      {showSignOutModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "8px",
+              padding: "24px",
+              maxWidth: "440px",
+              width: "100%",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+            }}
+          >
+            <h3 style={{ fontSize: "16px", fontWeight: "600", color: "#111827", margin: "0 0 8px 0" }}>
+              Sign Out of AI Lecture Platform
+            </h3>
+            <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px", lineHeight: "1.5" }}>
+              Would you like to keep your downloaded lectures on this device for offline viewing, or wipe all downloaded content?
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button
+                onClick={() => {
+                  setShowSignOutModal(false);
+                  onSignOut(false);
+                }}
+                style={{
+                  padding: "10px 16px",
+                  backgroundColor: "#2563eb",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                  cursor: "pointer",
+                }}
+              >
+                Keep Downloads & Sign Out
+              </button>
+              <button
+                onClick={() => {
+                  setShowSignOutModal(false);
+                  onSignOut(true);
+                }}
+                style={{
+                  padding: "10px 16px",
+                  backgroundColor: "#fee2e2",
+                  color: "#b91c1c",
+                  border: "1px solid #fecaca",
+                  borderRadius: "6px",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                  cursor: "pointer",
+                }}
+              >
+                Wipe All Downloads & Sign Out
+              </button>
+              <button
+                onClick={() => setShowSignOutModal(false)}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: "#ffffff",
+                  color: "#6b7280",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "6px",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Container */}
       <main style={{ flex: 1, padding: "24px", maxWidth: "1000px", margin: "0 auto", width: "100%" }}>
@@ -586,20 +824,58 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                       >
                         Encrypted
                       </span>
+
+                      {dl.is_expired ? (
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            color: "#b91c1c",
+                            fontWeight: "600",
+                            backgroundColor: "#fee2e2",
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          Expired — Connect to renew
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            color: "#2563eb",
+                            fontWeight: "500",
+                            backgroundColor: "#eff6ff",
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          {dl.days_left !== undefined && dl.days_left !== null
+                            ? `${dl.days_left} day${dl.days_left === 1 ? "" : "s"} left`
+                            : "Active"}
+                        </span>
+                      )}
+
                       <button
-                        onClick={() => onPlayLecture?.(dl.lecture_id)}
+                        onClick={() => {
+                          if (dl.is_expired) {
+                            alert("This lecture's offline license has expired. Please connect to the university network to renew.");
+                            return;
+                          }
+                          onPlayLecture?.(dl.lecture_id);
+                        }}
+                        disabled={dl.is_expired}
                         style={{
                           padding: "6px 14px",
-                          backgroundColor: "#2563eb",
+                          backgroundColor: dl.is_expired ? "#9ca3af" : "#2563eb",
                           color: "#ffffff",
                           border: "none",
                           borderRadius: "6px",
                           fontSize: "12px",
-                          cursor: "pointer",
+                          cursor: dl.is_expired ? "not-allowed" : "pointer",
                           fontWeight: "500",
                         }}
                       >
-                        Watch Offline
+                        {dl.is_expired ? "Connect to renew" : "Watch Offline"}
                       </button>
                       <button
                         onClick={() => deleteDownload(dl.lecture_id)}

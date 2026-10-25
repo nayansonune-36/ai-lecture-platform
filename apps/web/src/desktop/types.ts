@@ -58,9 +58,27 @@ export interface DownloadRecord {
   error: string | null;
   created_at: string;
   completed_at: string | null;
+  days_left?: number | null;
+  is_expired?: boolean;
+  expires_at?: string | null;
 }
 
 export type DownloadedLecture = DownloadRecord;
+
+export interface ConnectivityStatus {
+  is_online: boolean;
+  server_url: string | null;
+  rollback_detected: boolean;
+}
+
+export interface SyncResult {
+  is_online: boolean;
+  renewed_count: number;
+  revoked_count: number;
+  revoked_titles: string[];
+  progress_flushed_count: number;
+  error: string | null;
+}
 
 export interface DownloadProgressEvent {
   lecture_id: string;

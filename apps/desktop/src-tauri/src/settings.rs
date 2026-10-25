@@ -91,10 +91,74 @@ pub fn clear_last_user(conn: &Connection) -> Result<()> {
     delete_setting(conn, "last_user")
 }
 
+pub fn get_max_seen_timestamp(conn: &Connection) -> Result<Option<i64>> {
+    if let Some(val) = get_setting(conn, "max_seen_timestamp")? {
+        if let Ok(ts) = val.parse::<i64>() {
+            return Ok(Some(ts));
+        }
+    }
+    Ok(None)
+}
+
+pub fn update_max_seen_timestamp(conn: &Connection, timestamp: i64) -> Result<()> {
+    let current_max = get_max_seen_timestamp(conn)?.unwrap_or(0);
+    if timestamp > current_max {
+        set_setting(conn, "max_seen_timestamp", &timestamp.to_string())?;
+    }
+    Ok(())
+}
+
+pub fn set_max_seen_timestamp_authoritative(conn: &Connection, timestamp: i64) -> Result<()> {
+    set_setting(conn, "max_seen_timestamp", &timestamp.to_string())
+}
+
+pub fn check_clock_rollback(conn: &Connection) -> Result<bool> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    if let Some(max_seen) = get_max_seen_timestamp(conn)? {
+        if now < max_seen {
+            return Ok(true);
+        }
+    }
+    let _ = update_max_seen_timestamp(conn, now);
+    Ok(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::Database;
+
+    #[test]
+    fn test_clock_rollback_protection() {
+        let db = Database::in_memory().unwrap();
+        let conn = db.conn();
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        // 1. Initial state: no rollback
+        assert_eq!(check_clock_rollback(conn).unwrap(), false);
+        let max_seen = get_max_seen_timestamp(conn).unwrap().unwrap();
+        assert!(max_seen >= now);
+
+        // 2. Setting a higher future timestamp simulates advancing the clock
+        let future_time = now + 100_000;
+        set_max_seen_timestamp_authoritative(conn, future_time).unwrap();
+        assert_eq!(get_max_seen_timestamp(conn).unwrap(), Some(future_time));
+
+        // 3. Now checking rollback detects that current system clock (now) < future_time
+        assert_eq!(check_clock_rollback(conn).unwrap(), true);
+
+        // 4. Server sync provides authoritative current timestamp, resetting the lock
+        set_max_seen_timestamp_authoritative(conn, now).unwrap();
+        assert_eq!(check_clock_rollback(conn).unwrap(), false);
+    }
 
     #[test]
     fn test_settings_crud() {

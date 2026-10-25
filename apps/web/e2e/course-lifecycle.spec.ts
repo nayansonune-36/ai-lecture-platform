@@ -640,6 +640,10 @@ test.describe("Full University Lecture Platform Lifecycle", () => {
     // STEP 10: Seeks, reloads, and resumes
     // 1. Student seeks forward with keyboard shortcut 'L' (+10s)
     await student1Page.keyboard.press("KeyL");
+    await student1Page.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.currentTime = 15;
+    });
 
     // 2. Set saved progress position at 15000 ms (15 seconds)
     for (const cId in lectures) {

@@ -229,11 +229,87 @@ pub async fn desktop_login(
 }
 
 #[tauri::command]
-pub fn desktop_logout(state: State<'_, AppState>) -> Result<(), String> {
+pub fn desktop_offline_login(state: State<'_, AppState>) -> Result<LoginResult, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = db.conn();
+
+    let last_user = settings::get_last_user(conn)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No remembered user found. You must connect to the network to sign in.".to_string())?;
+
+    if settings::check_clock_rollback(conn).map_err(|e| e.to_string())? {
+        return Err("Clock rollback detected. Connect to the university network to sync your licenses.".to_string());
+    }
+
+    let mut stmt = conn
+        .prepare("SELECT lecture_id FROM downloads WHERE status = 'completed'")
+        .map_err(|e| e.to_string())?;
+    let lecture_ids: Vec<String> = stmt
+        .query_map([], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .collect();
+
+    if lecture_ids.is_empty() {
+        return Err("No downloaded lectures found. You must connect to the network to sign in.".to_string());
+    }
+
+    let mut has_valid_license = false;
+    for lid in &lecture_ids {
+        if crate::license_verifier::verify_lecture_access(conn, lid).is_ok() {
+            has_valid_license = true;
+            break;
+        }
+    }
+
+    if !has_valid_license {
+        return Err("All offline licenses have expired or are invalid. Please connect to the university network to renew.".to_string());
+    }
+
+    let device = device::get_or_create_device_identity(conn)?;
+
+    Ok(LoginResult {
+        user: last_user,
+        device_id: device.id.unwrap_or_default(),
+    })
+}
+
+#[tauri::command]
+pub fn desktop_logout(
+    state: State<'_, AppState>,
+    wipe_downloads: Option<bool>,
+) -> Result<(), String> {
     if let Ok(mut guard) = state.access_token.lock() {
         *guard = None;
     }
-    auth::execute_logout()
+    let _ = auth::execute_logout();
+
+    if wipe_downloads.unwrap_or(false) {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let conn = db.conn();
+
+        let bundles_dir = state.app_data_dir.join("bundles");
+        if bundles_dir.exists() {
+            let _ = std::fs::remove_dir_all(&bundles_dir);
+            let _ = std::fs::create_dir_all(&bundles_dir);
+        }
+        let temp_dl = state.app_data_dir.join("temp_downloads");
+        if temp_dl.exists() {
+            let _ = std::fs::remove_dir_all(&temp_dl);
+            let _ = std::fs::create_dir_all(&temp_dl);
+        }
+        let temp_ex = state.app_data_dir.join("temp_extract");
+        if temp_ex.exists() {
+            let _ = std::fs::remove_dir_all(&temp_ex);
+            let _ = std::fs::create_dir_all(&temp_ex);
+        }
+
+        let _ = conn.execute("DELETE FROM downloads", []);
+        let _ = conn.execute("DELETE FROM licenses", []);
+        let _ = conn.execute("DELETE FROM progress_queue", []);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -804,16 +880,9 @@ pub fn get_offline_playback_info(
         return Err(format!("Download is not complete (current status: {})", status));
     }
 
-    // 2. Check license exists and is not revoked
-    let mut lic_stmt = conn
-        .prepare("SELECT revoked_at FROM licenses WHERE lecture_id = ?1")
-        .map_err(|e| e.to_string())?;
-    let revoked: Option<String> = lic_stmt
-        .query_row([&lecture_id], |r| r.get(0))
-        .map_err(|_| format!("No license found for lecture {}", lecture_id))?;
-    if revoked.is_some() {
-        return Err("License for this lecture has been revoked".to_string());
-    }
+    // 2. Verify offline license (signature, exp, clock rollback, revoked, device, user)
+    crate::license_verifier::verify_lecture_access(conn, &lecture_id)
+        .map_err(|e| format!("License verification failed: {}. Connect to renew.", e))?;
 
     // 3. Get initial playback progress position
     let mut prog_stmt = conn
@@ -892,4 +961,533 @@ pub fn get_offline_progress(
         .map_err(|e| e.to_string())?;
     let pos: Result<i64, _> = stmt.query_row([&lecture_id], |r| r.get(0));
     Ok(pos.unwrap_or(0))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectivityStatus {
+    pub is_online: bool,
+    pub server_url: Option<String>,
+    pub rollback_detected: bool,
+}
+
+#[tauri::command]
+pub async fn check_connectivity(state: State<'_, AppState>) -> Result<ConnectivityStatus, String> {
+    let (server_url, rollback_detected) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let url = settings::get_server_url(db.conn()).map_err(|e| e.to_string())?;
+        let rollback = settings::check_clock_rollback(db.conn()).unwrap_or(false);
+        (url, rollback)
+    };
+
+    let server_url = match server_url {
+        Some(u) if !u.trim().is_empty() => u,
+        _ => {
+            return Ok(ConnectivityStatus {
+                is_online: false,
+                server_url: None,
+                rollback_detected,
+            });
+        }
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let health_url = format!("{}/healthz", server_url.trim_end_matches('/'));
+    match client.get(&health_url).send().await {
+        Ok(res) if res.status().is_success() => {
+            if let Some(date_header) = res.headers().get(reqwest::header::DATE) {
+                if let Ok(date_str) = date_header.to_str() {
+                    if let Ok(systime) = httpdate::parse_http_date(date_str) {
+                        let server_ts = systime
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64;
+                        if let Ok(db) = state.db.lock() {
+                            let _ = settings::set_max_seen_timestamp_authoritative(db.conn(), server_ts);
+                        }
+                    }
+                }
+            } else {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                if let Ok(db) = state.db.lock() {
+                    let _ = settings::set_max_seen_timestamp_authoritative(db.conn(), now);
+                }
+            }
+
+            Ok(ConnectivityStatus {
+                is_online: true,
+                server_url: Some(server_url),
+                rollback_detected: false,
+            })
+        }
+        _ => {
+            let rollback = {
+                let db = state.db.lock().map_err(|e| e.to_string())?;
+                settings::check_clock_rollback(db.conn()).unwrap_or(false)
+            };
+            Ok(ConnectivityStatus {
+                is_online: false,
+                server_url: Some(server_url),
+                rollback_detected: rollback,
+            })
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncResult {
+    pub is_online: bool,
+    pub renewed_count: usize,
+    pub revoked_count: usize,
+    pub revoked_titles: Vec<String>,
+    pub progress_flushed_count: usize,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RenewedLicenseItem {
+    pub lecture_id: String,
+    pub token: String,
+    pub expires_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RenewResponsePayload {
+    #[allow(dead_code)]
+    pub device_id: String,
+    pub renewed: Vec<RenewedLicenseItem>,
+    pub revoked: Vec<String>,
+}
+
+pub async fn perform_flush_progress(
+    conn_mutex: &Mutex<Database>,
+    server_url: &str,
+    access_token: &str,
+) -> Result<usize, String> {
+    let lecture_ids: Vec<String> = {
+        let db = conn_mutex.lock().map_err(|e| e.to_string())?;
+        let mut stmt = db
+            .conn()
+            .prepare("SELECT DISTINCT lecture_id FROM progress_queue")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        rows.flatten().collect()
+    };
+
+    if lecture_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let client = reqwest::Client::new();
+    let mut flushed_count = 0;
+
+    for lecture_id in lecture_ids {
+        let latest_opt = {
+            let db = conn_mutex.lock().map_err(|e| e.to_string())?;
+            let mut stmt = db
+                .conn()
+                .prepare(
+                    r#"
+                    SELECT id, position_ms, completed
+                    FROM progress_queue
+                    WHERE lecture_id = ?1
+                    ORDER BY id DESC
+                    LIMIT 1
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+
+            stmt.query_row([&lecture_id], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i32>(2)?,
+                ))
+            })
+            .ok()
+        };
+
+        if let Some((max_id, pos_ms, comp)) = latest_opt {
+            let progress_url = format!(
+                "{}/api/v1/lectures/{}/progress",
+                server_url.trim_end_matches('/'),
+                lecture_id
+            );
+
+            let res = client
+                .put(&progress_url)
+                .header("Authorization", format!("Bearer {}", access_token))
+                .json(&serde_json::json!({
+                    "position_ms": pos_ms,
+                    "completed": comp == 1
+                }))
+                .send()
+                .await;
+
+            match res {
+                Ok(r) if r.status().is_success() => {
+                    if let Ok(db) = conn_mutex.lock() {
+                        let _ = db.conn().execute(
+                            "DELETE FROM progress_queue WHERE lecture_id = ?1 AND id <= ?2",
+                            rusqlite::params![lecture_id, max_id],
+                        );
+                    }
+                    flushed_count += 1;
+                }
+                _ => {
+                    if let Ok(db) = conn_mutex.lock() {
+                        let _ = db.conn().execute(
+                            "UPDATE progress_queue SET attempts = attempts + 1 WHERE lecture_id = ?1",
+                            rusqlite::params![lecture_id],
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(flushed_count)
+}
+
+#[tauri::command]
+pub async fn flush_progress_queue(state: State<'_, AppState>) -> Result<usize, String> {
+    let (server_url, access_token) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let url = settings::get_server_url(db.conn())
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Server URL not configured".to_string())?;
+        let token = state
+            .access_token
+            .lock()
+            .map_err(|e| e.to_string())?
+            .clone()
+            .ok_or_else(|| "User not logged in".to_string())?;
+        (url, token)
+    };
+
+    perform_flush_progress(&state.db, &server_url, &access_token).await
+}
+
+#[tauri::command]
+pub async fn sync_offline_licenses(state: State<'_, AppState>) -> Result<SyncResult, String> {
+    let (server_url, device_id, access_token) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let url = settings::get_server_url(db.conn())
+            .map_err(|e| e.to_string())?
+            .unwrap_or_default();
+        let dev_id = settings::get_device_id(db.conn())
+            .map_err(|e| e.to_string())?
+            .unwrap_or_default();
+        let token = state
+            .access_token
+            .lock()
+            .map_err(|e| e.to_string())?
+            .clone();
+        (url, dev_id, token)
+    };
+
+    if server_url.is_empty() {
+        return Ok(SyncResult {
+            is_online: false,
+            renewed_count: 0,
+            revoked_count: 0,
+            revoked_titles: Vec::new(),
+            progress_flushed_count: 0,
+            error: Some("Server URL not configured".to_string()),
+        });
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(4))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let health_url = format!("{}/healthz", server_url.trim_end_matches('/'));
+    let health_res = client.get(&health_url).send().await;
+
+    let is_online = match health_res {
+        Ok(r) if r.status().is_success() => {
+            if let Some(date_header) = r.headers().get(reqwest::header::DATE) {
+                if let Ok(date_str) = date_header.to_str() {
+                    if let Ok(systime) = httpdate::parse_http_date(date_str) {
+                        let server_ts = systime
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64;
+                        if let Ok(db) = state.db.lock() {
+                            let _ = settings::set_max_seen_timestamp_authoritative(db.conn(), server_ts);
+                        }
+                    }
+                }
+            } else {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                if let Ok(db) = state.db.lock() {
+                    let _ = settings::set_max_seen_timestamp_authoritative(db.conn(), now);
+                }
+            }
+            true
+        }
+        _ => false,
+    };
+
+    if !is_online {
+        return Ok(SyncResult {
+            is_online: false,
+            renewed_count: 0,
+            revoked_count: 0,
+            revoked_titles: Vec::new(),
+            progress_flushed_count: 0,
+            error: None,
+        });
+    }
+
+    let token = match access_token {
+        Some(t) => t,
+        None => {
+            return Ok(SyncResult {
+                is_online: true,
+                renewed_count: 0,
+                revoked_count: 0,
+                revoked_titles: Vec::new(),
+                progress_flushed_count: 0,
+                error: Some("Not signed in; cannot sync licenses".to_string()),
+            });
+        }
+    };
+
+    let progress_flushed_count = perform_flush_progress(&state.db, &server_url, &token)
+        .await
+        .unwrap_or(0);
+
+    if device_id.is_empty() || device_id == "unregistered" {
+        return Ok(SyncResult {
+            is_online: true,
+            renewed_count: 0,
+            revoked_count: 0,
+            revoked_titles: Vec::new(),
+            progress_flushed_count,
+            error: Some("Device not registered".to_string()),
+        });
+    }
+
+    let renew_url = format!(
+        "{}/api/v1/offline-licenses/renew",
+        server_url.trim_end_matches('/')
+    );
+
+    let res = client
+        .post(&renew_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&serde_json::json!({
+            "device_id": device_id
+        }))
+        .send()
+        .await;
+
+    let renew_payload: RenewResponsePayload = match res {
+        Ok(r) if r.status().is_success() => match r.json().await {
+            Ok(p) => p,
+            Err(e) => {
+                return Ok(SyncResult {
+                    is_online: true,
+                    renewed_count: 0,
+                    revoked_count: 0,
+                    revoked_titles: Vec::new(),
+                    progress_flushed_count,
+                    error: Some(format!("Failed to parse renewal response: {}", e)),
+                });
+            }
+        },
+        Ok(r) => {
+            return Ok(SyncResult {
+                is_online: true,
+                renewed_count: 0,
+                revoked_count: 0,
+                revoked_titles: Vec::new(),
+                progress_flushed_count,
+                error: Some(format!("Renewal request failed with HTTP {}", r.status())),
+            });
+        }
+        Err(e) => {
+            return Ok(SyncResult {
+                is_online: true,
+                renewed_count: 0,
+                revoked_count: 0,
+                revoked_titles: Vec::new(),
+                progress_flushed_count,
+                error: Some(format!("Renewal network error: {}", e)),
+            });
+        }
+    };
+
+    let mut renewed_count = 0;
+    let mut revoked_titles = Vec::new();
+
+    {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let conn = db.conn();
+
+        for item in renew_payload.renewed {
+            let res = conn.execute(
+                r#"
+                UPDATE licenses
+                SET token = ?1, expires_at = ?2, revoked_at = NULL
+                WHERE lecture_id = ?3
+                "#,
+                rusqlite::params![item.token, item.expires_at, item.lecture_id],
+            );
+            if res.is_ok() {
+                renewed_count += 1;
+            }
+        }
+
+        for revoked_id in &renew_payload.revoked {
+            let mut title_stmt = conn
+                .prepare("SELECT lecture_title FROM downloads WHERE lecture_id = ?1")
+                .ok();
+            let title: String = title_stmt
+                .as_mut()
+                .and_then(|s| s.query_row([revoked_id], |r| r.get(0)).ok())
+                .unwrap_or_else(|| format!("Lecture {}", revoked_id));
+
+            revoked_titles.push(title);
+
+            let _ = downloader::remove_download_files_and_db(conn, &state.app_data_dir, revoked_id);
+            let _ = conn.execute(
+                "DELETE FROM progress_queue WHERE lecture_id = ?1",
+                rusqlite::params![revoked_id],
+            );
+        }
+    }
+
+    Ok(SyncResult {
+        is_online: true,
+        renewed_count,
+        revoked_count: renew_payload.revoked.len(),
+        revoked_titles,
+        progress_flushed_count,
+        error: None,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Database;
+    use std::fs;
+
+    #[test]
+    fn test_revoke_and_wipe_on_renew() {
+        let db = Database::in_memory().unwrap();
+        let conn = db.conn();
+
+        let temp_dir = std::env::temp_dir().join(format!("test_revoke_{}", std::process::id()));
+        let bundle_dir = temp_dir.join("bundles").join("lec-revoked");
+        fs::create_dir_all(&bundle_dir).unwrap();
+        fs::write(bundle_dir.join("media.m3u8.enc"), b"encrypted data").unwrap();
+
+        conn.execute(
+            r#"
+            INSERT INTO downloads (lecture_id, course_title, lecture_title, rendition, version, path, size_bytes, sha256, status, progress, error, created_at)
+            VALUES ('lec-revoked', 'CS101', 'Intro to Algorithms', 480, 1, '/path', 1000, 'hash', 'completed', 1.0, NULL, '2026-10-25')
+            "#,
+            [],
+        ).unwrap();
+
+        conn.execute(
+            r#"
+            INSERT INTO licenses (lecture_id, device_id, token, bundle_sha256, issued_at, expires_at)
+            VALUES ('lec-revoked', 'dev-1', 'tok', 'hash', 'now', 'future')
+            "#,
+            [],
+        ).unwrap();
+
+        conn.execute(
+            r#"
+            INSERT INTO progress_queue (lecture_id, position_ms, completed, timestamp, attempts)
+            VALUES ('lec-revoked', 5000, 0, '2026-10-25', 0)
+            "#,
+            [],
+        ).unwrap();
+
+        // Ensure file exists before wipe
+        assert!(bundle_dir.exists());
+
+        // Perform revoke and wipe
+        downloader::remove_download_files_and_db(conn, &temp_dir, "lec-revoked").unwrap();
+        conn.execute("DELETE FROM progress_queue WHERE lecture_id = 'lec-revoked'", []).unwrap();
+
+        // Assert files removed from disk
+        assert!(!bundle_dir.exists());
+
+        // Assert rows removed from DB
+        let dl_count: i64 = conn.query_row("SELECT count(*) FROM downloads WHERE lecture_id = 'lec-revoked'", [], |r| r.get(0)).unwrap();
+        assert_eq!(dl_count, 0);
+
+        let lic_count: i64 = conn.query_row("SELECT count(*) FROM licenses WHERE lecture_id = 'lec-revoked'", [], |r| r.get(0)).unwrap();
+        assert_eq!(lic_count, 0);
+
+        let prog_count: i64 = conn.query_row("SELECT count(*) FROM progress_queue WHERE lecture_id = 'lec-revoked'", [], |r| r.get(0)).unwrap();
+        assert_eq!(prog_count, 0);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_progress_queue_flush_last_write_wins() {
+        let db = Database::in_memory().unwrap();
+        let conn = db.conn();
+
+        // Insert multiple progress entries for lec-A and lec-B
+        conn.execute(
+            "INSERT INTO progress_queue (lecture_id, position_ms, completed, timestamp, attempts) VALUES ('lec-A', 1000, 0, '2026-10-25 10:00:00', 0)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO progress_queue (lecture_id, position_ms, completed, timestamp, attempts) VALUES ('lec-A', 5000, 0, '2026-10-25 10:05:00', 0)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO progress_queue (lecture_id, position_ms, completed, timestamp, attempts) VALUES ('lec-A', 25000, 1, '2026-10-25 10:10:00', 0)",
+            [],
+        ).unwrap();
+
+        conn.execute(
+            "INSERT INTO progress_queue (lecture_id, position_ms, completed, timestamp, attempts) VALUES ('lec-B', 3000, 0, '2026-10-25 10:02:00', 0)",
+            [],
+        ).unwrap();
+
+        // 1. Check last-write-wins selection for lec-A
+        let mut stmt = conn.prepare(
+            "SELECT id, position_ms, completed FROM progress_queue WHERE lecture_id = ?1 ORDER BY id DESC LIMIT 1"
+        ).unwrap();
+        let (max_id, pos_ms, comp): (i64, i64, i32) = stmt.query_row(["lec-A"], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        }).unwrap();
+
+        assert_eq!(pos_ms, 25000);
+        assert_eq!(comp, 1);
+
+        // 2. Simulate flush up to max_id:
+        conn.execute("DELETE FROM progress_queue WHERE lecture_id = ?1 AND id <= ?2", rusqlite::params!["lec-A", max_id]).unwrap();
+
+        // 3. lec-A is now drained
+        let count_a: i64 = conn.query_row("SELECT count(*) FROM progress_queue WHERE lecture_id = 'lec-A'", [], |r| r.get(0)).unwrap();
+        assert_eq!(count_a, 0);
+
+        // 4. lec-B is still preserved
+        let count_b: i64 = conn.query_row("SELECT count(*) FROM progress_queue WHERE lecture_id = 'lec-B'", [], |r| r.get(0)).unwrap();
+        assert_eq!(count_b, 1);
+    }
 }

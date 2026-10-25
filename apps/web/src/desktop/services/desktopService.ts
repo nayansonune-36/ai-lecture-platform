@@ -11,6 +11,8 @@ import type {
   DesktopSettingsInfo,
   OfflinePlaybackInfo,
   LocalServerInfo,
+  ConnectivityStatus,
+  SyncResult,
 } from "../types.js";
 
 export const desktopService = {
@@ -31,8 +33,24 @@ export const desktopService = {
     return invoke<LoginResult>("desktop_login", { email, password });
   },
 
-  async logout(): Promise<void> {
-    return invoke<void>("desktop_logout");
+  async logout(wipeDownloads?: boolean): Promise<void> {
+    return invoke<void>("desktop_logout", { wipeDownloads: wipeDownloads ?? false });
+  },
+
+  async offlineLogin(): Promise<LoginResult> {
+    return invoke<LoginResult>("desktop_offline_login");
+  },
+
+  async checkConnectivity(): Promise<ConnectivityStatus> {
+    return invoke<ConnectivityStatus>("check_connectivity");
+  },
+
+  async syncOfflineLicenses(): Promise<SyncResult> {
+    return invoke<SyncResult>("sync_offline_licenses");
+  },
+
+  async flushProgressQueue(): Promise<number> {
+    return invoke<number>("flush_progress_queue");
   },
 
   async getEnrolledCoursesAndLectures(): Promise<CourseWithLectures[]> {

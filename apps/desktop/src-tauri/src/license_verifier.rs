@@ -163,7 +163,131 @@ pub fn format_public_key_pem(key_bytes: &[u8; 32]) -> String {
     format!("-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----\n", b64)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LicenseStatus {
+    pub is_valid: bool,
+    pub is_expired: bool,
+    pub days_left: Option<i64>,
+    pub expires_at: Option<String>,
+    pub error: Option<String>,
+}
+
+pub fn get_license_status(conn: &Connection, lecture_id: &str) -> LicenseStatus {
+    // 1. Clock rollback check
+    if let Ok(true) = settings::check_clock_rollback(conn) {
+        return LicenseStatus {
+            is_valid: false,
+            is_expired: true,
+            days_left: Some(0),
+            expires_at: None,
+            error: Some("Clock rollback detected. Connect to the university network to sync your licenses.".to_string()),
+        };
+    }
+
+    let mut stmt = match conn.prepare(
+        "SELECT token, expires_at, revoked_at FROM licenses WHERE lecture_id = ?1",
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            return LicenseStatus {
+                is_valid: false,
+                is_expired: true,
+                days_left: None,
+                expires_at: None,
+                error: Some(format!("Database query error: {}", e)),
+            }
+        }
+    };
+
+    let row = stmt.query_row([lecture_id], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, Option<String>>(2)?,
+        ))
+    });
+
+    let (token, db_expires_at, revoked_at) = match row {
+        Ok(r) => r,
+        Err(_) => {
+            return LicenseStatus {
+                is_valid: false,
+                is_expired: true,
+                days_left: None,
+                expires_at: None,
+                error: Some("No offline license record found".to_string()),
+            }
+        }
+    };
+
+    if revoked_at.is_some() {
+        return LicenseStatus {
+            is_valid: false,
+            is_expired: true,
+            days_left: Some(0),
+            expires_at: Some(db_expires_at),
+            error: Some("License has been revoked".to_string()),
+        };
+    }
+
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return LicenseStatus {
+            is_valid: false,
+            is_expired: true,
+            days_left: Some(0),
+            expires_at: Some(db_expires_at),
+            error: Some("Invalid license token format".to_string()),
+        };
+    }
+
+    let claims_opt = decode_base64_url(parts[1])
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<LicenseClaims>(&bytes).ok());
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    match claims_opt {
+        Some(claims) => {
+            if claims.exp <= now {
+                LicenseStatus {
+                    is_valid: false,
+                    is_expired: true,
+                    days_left: Some(0),
+                    expires_at: Some(db_expires_at),
+                    error: Some("License expired".to_string()),
+                }
+            } else {
+                let remaining_secs = claims.exp - now;
+                let days_left = (remaining_secs + 86399) / 86400;
+                LicenseStatus {
+                    is_valid: true,
+                    is_expired: false,
+                    days_left: Some(days_left),
+                    expires_at: Some(db_expires_at),
+                    error: None,
+                }
+            }
+        }
+        None => LicenseStatus {
+            is_valid: false,
+            is_expired: true,
+            days_left: Some(0),
+            expires_at: Some(db_expires_at),
+            error: Some("Could not parse license claims".to_string()),
+        },
+    }
+}
+
 pub fn verify_lecture_access(conn: &Connection, lecture_id: &str) -> Result<LicenseClaims, String> {
+    // 0. Clock rollback check
+    if settings::check_clock_rollback(conn).map_err(|e| e.to_string())? {
+        return Err("Clock rollback detected. Connect to the university network to sync your licenses.".to_string());
+    }
+
     // 1. Query licenses row
     let mut stmt = conn
         .prepare(
@@ -343,5 +467,153 @@ mod tests {
         .unwrap();
         let err = verify_lecture_access(conn, "lec-1").unwrap_err();
         assert!(err.contains("revoked"));
+    }
+
+    #[test]
+    fn test_expiry_and_days_left() {
+        let db = Database::in_memory().unwrap();
+        let conn = db.conn();
+
+        let mut csprng = OsRng;
+        let signing_key = SigningKey::generate(&mut csprng);
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        // 1. License with 7 days remaining
+        let claims_7d = LicenseClaims {
+            user_id: "user-1".to_string(),
+            device_id: "dev-1".to_string(),
+            lecture_id: "lec-7d".to_string(),
+            bundle_sha256: "hash".to_string(),
+            issued_at: None,
+            expires_at: None,
+            iat: Some(now),
+            exp: now + (7 * 86400),
+        };
+        let token_7d = issue_test_license_token(&signing_key, &claims_7d).unwrap();
+
+        conn.execute(
+            r#"
+            INSERT INTO licenses (lecture_id, device_id, token, bundle_sha256, issued_at, expires_at, revoked_at)
+            VALUES (?1, ?2, ?3, 'hash', 'now', '2026-11-01', NULL)
+            "#,
+            rusqlite::params!["lec-7d", "dev-1", token_7d],
+        )
+        .unwrap();
+
+        let status_7d = get_license_status(conn, "lec-7d");
+        assert_eq!(status_7d.is_valid, true);
+        assert_eq!(status_7d.is_expired, false);
+        assert_eq!(status_7d.days_left, Some(7));
+
+        // 2. License expired 1 hour ago
+        let claims_exp = LicenseClaims {
+            user_id: "user-1".to_string(),
+            device_id: "dev-1".to_string(),
+            lecture_id: "lec-exp".to_string(),
+            bundle_sha256: "hash".to_string(),
+            issued_at: None,
+            expires_at: None,
+            iat: Some(now - 7200),
+            exp: now - 3600,
+        };
+        let token_exp = issue_test_license_token(&signing_key, &claims_exp).unwrap();
+
+        conn.execute(
+            r#"
+            INSERT INTO licenses (lecture_id, device_id, token, bundle_sha256, issued_at, expires_at, revoked_at)
+            VALUES (?1, ?2, ?3, 'hash', 'now', '2026-10-24', NULL)
+            "#,
+            rusqlite::params!["lec-exp", "dev-1", token_exp],
+        )
+        .unwrap();
+
+        let status_exp = get_license_status(conn, "lec-exp");
+        assert_eq!(status_exp.is_valid, false);
+        assert_eq!(status_exp.is_expired, true);
+        assert_eq!(status_exp.days_left, Some(0));
+
+        // 3. Revoked license
+        conn.execute(
+            "UPDATE licenses SET revoked_at = '2026-10-25' WHERE lecture_id = 'lec-7d'",
+            [],
+        )
+        .unwrap();
+        let status_revoked = get_license_status(conn, "lec-7d");
+        assert_eq!(status_revoked.is_valid, false);
+        assert_eq!(status_revoked.is_expired, true);
+        assert_eq!(status_revoked.days_left, Some(0));
+    }
+
+    #[test]
+    fn test_clock_rollback_blocks_playback() {
+        let db = Database::in_memory().unwrap();
+        let conn = db.conn();
+
+        let mut csprng = OsRng;
+        let signing_key = SigningKey::generate(&mut csprng);
+        let pub_pem = format_public_key_pem(&signing_key.verifying_key().to_bytes());
+
+        settings::set_license_public_key(conn, &pub_pem).unwrap();
+        settings::set_device_id(conn, "dev-1").unwrap();
+        settings::set_last_user(
+            conn,
+            &settings::UserProfile {
+                id: "user-1".to_string(),
+                email: "student@univ.edu".to_string(),
+                name: "Student".to_string(),
+                role: "student".to_string(),
+            },
+        )
+        .unwrap();
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let claims = LicenseClaims {
+            user_id: "user-1".to_string(),
+            device_id: "dev-1".to_string(),
+            lecture_id: "lec-rollback".to_string(),
+            bundle_sha256: "hash".to_string(),
+            issued_at: None,
+            expires_at: None,
+            iat: Some(now),
+            exp: now + 864000,
+        };
+        let token = issue_test_license_token(&signing_key, &claims).unwrap();
+
+        conn.execute(
+            r#"
+            INSERT INTO licenses (lecture_id, device_id, token, bundle_sha256, issued_at, expires_at, revoked_at)
+            VALUES (?1, ?2, ?3, 'hash', 'now', 'future', NULL)
+            "#,
+            rusqlite::params!["lec-rollback", "dev-1", token],
+        )
+        .unwrap();
+
+        // Normally access succeeds
+        assert!(verify_lecture_access(conn, "lec-rollback").is_ok());
+
+        // Now simulate clock rollback: system saw a timestamp 100_000 seconds into the future
+        settings::set_max_seen_timestamp_authoritative(conn, now + 100_000).unwrap();
+
+        // Verification must be rejected
+        let res = verify_lecture_access(conn, "lec-rollback");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("Clock rollback detected"));
+
+        // License status reports expired
+        let status = get_license_status(conn, "lec-rollback");
+        assert_eq!(status.is_expired, true);
+        assert_eq!(status.days_left, Some(0));
+
+        // When app syncs with server, authoritative timestamp is reset to current server time
+        settings::set_max_seen_timestamp_authoritative(conn, now).unwrap();
+        assert!(verify_lecture_access(conn, "lec-rollback").is_ok());
     }
 }

@@ -119,8 +119,12 @@ export function useLibrary(isLoggedIn: boolean) {
     void setupListener();
 
     return () => {
-      if (unlisten) {
-        unlisten();
+      try {
+        if (unlisten) {
+          unlisten();
+        }
+      } catch {
+        // Safe ignore
       }
     };
   }, [refreshDownloads]);

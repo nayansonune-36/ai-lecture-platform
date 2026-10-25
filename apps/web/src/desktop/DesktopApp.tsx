@@ -5,6 +5,7 @@ import { LoginScreen } from "./screens/LoginScreen.js";
 import { LibraryScreen } from "./screens/LibraryScreen.js";
 import { SettingsScreen } from "./screens/SettingsScreen.js";
 import { OfflinePlayerScreen } from "./screens/OfflinePlayerScreen.js";
+import { desktopService } from "./services/desktopService.js";
 import type { UserProfile } from "./types.js";
 
 type DesktopScreen = "server_setup" | "login" | "library" | "settings" | "player";
@@ -59,7 +60,12 @@ export const DesktopApp: React.FC = () => {
     setCurrentScreen("library");
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async (wipeDownloads?: boolean) => {
+    try {
+      await desktopService.logout(wipeDownloads);
+    } catch (err) {
+      console.error("Sign out error:", err);
+    }
     setCurrentUser(null);
     void refresh();
     setCurrentScreen("login");

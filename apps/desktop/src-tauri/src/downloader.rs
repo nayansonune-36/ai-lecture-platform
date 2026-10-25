@@ -67,6 +67,9 @@ pub struct DownloadRecord {
     pub error: Option<String>,
     pub created_at: String,
     pub completed_at: Option<String>,
+    pub days_left: Option<i64>,
+    pub is_expired: bool,
+    pub expires_at: Option<String>,
 }
 
 pub fn compute_sha256(path: &Path) -> Result<String, String> {
@@ -429,30 +432,68 @@ pub fn list_all_downloads(conn: &Connection) -> Result<Vec<DownloadRecord>, Stri
         )
         .map_err(|e| e.to_string())?;
 
-    let rows = stmt
+    let raw_rows = stmt
         .query_map([], |row| {
-            Ok(DownloadRecord {
-                lecture_id: row.get(0)?,
-                course_title: row.get(1)?,
-                lecture_title: row.get(2)?,
-                rendition: row.get(3)?,
-                version: row.get(4)?,
-                path: row.get(5)?,
-                size_bytes: row.get(6)?,
-                sha256: row.get(7)?,
-                status: row.get(8)?,
-                progress: row.get(9)?,
-                error: row.get(10)?,
-                created_at: row.get(11)?,
-                completed_at: row.get(12)?,
-            })
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i32>(3)?,
+                row.get::<_, i32>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
+                row.get::<_, f64>(9)?,
+                row.get::<_, Option<String>>(10)?,
+                row.get::<_, String>(11)?,
+                row.get::<_, Option<String>>(12)?,
+            ))
         })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    let mut result = Vec::new();
-    for r in rows.flatten() {
-        result.push(r);
+    drop(stmt);
+
+    let mut result = Vec::with_capacity(raw_rows.len());
+    for (
+        lecture_id,
+        course_title,
+        lecture_title,
+        rendition,
+        version,
+        path,
+        size_bytes,
+        sha256,
+        status,
+        progress,
+        error,
+        created_at,
+        completed_at,
+    ) in raw_rows
+    {
+        let lic_status = crate::license_verifier::get_license_status(conn, &lecture_id);
+        result.push(DownloadRecord {
+            lecture_id,
+            course_title,
+            lecture_title,
+            rendition,
+            version,
+            path,
+            size_bytes,
+            sha256,
+            status,
+            progress,
+            error,
+            created_at,
+            completed_at,
+            days_left: lic_status.days_left,
+            is_expired: lic_status.is_expired,
+            expires_at: lic_status.expires_at,
+        });
     }
+
     Ok(result)
 }
 

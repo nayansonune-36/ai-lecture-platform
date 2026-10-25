@@ -110,14 +110,29 @@ test.describe("Task O4c: Desktop Offline Playback with Network Disabled", () => 
     await page.addInitScript(() => {
       const savedProgress: Record<string, number> = { "lec-offline-101": 15000 };
 
-      (window as any).__TAURI_INTERNALS__ = {
-        transformCallback: (_fn: any) => 1,
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+        transformCallback: () => 1,
         unregisterCallback: () => {},
         event: {
           unregisterListener: () => {},
         },
-        invoke: async (cmd: string, args?: any) => {
+        plugins: {
+          event: {
+            unregisterListener: () => {},
+          },
+        },
+        invoke: async (cmd: string, args?: Record<string, unknown>) => {
           console.log("[TAURI MOCK INVOKE]", cmd, JSON.stringify(args));
+          if (cmd === "check_connectivity") {
+            return {
+              is_online: false,
+              server_url: "http://127.0.0.1:8000",
+              rollback_detected: false,
+            };
+          }
+          if (cmd.startsWith("plugin:event|")) {
+            return 1;
+          }
           if (cmd === "get_desktop_state") {
             return {
               server_url: "http://127.0.0.1:8000",
