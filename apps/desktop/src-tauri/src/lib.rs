@@ -2,6 +2,8 @@ pub mod auth;
 pub mod commands;
 pub mod db;
 pub mod device;
+pub mod downloader;
+pub mod encryption;
 pub mod keyring_store;
 pub mod settings;
 
@@ -27,6 +29,7 @@ pub fn run() {
                 db: std::sync::Mutex::new(db),
                 app_data_dir,
                 access_token: std::sync::Mutex::new(None),
+                active_downloads: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
             Ok(())
         })
@@ -36,7 +39,14 @@ pub fn run() {
             commands::desktop_login,
             commands::desktop_logout,
             commands::get_enrolled_courses_and_lectures,
-            commands::get_downloaded_lectures,
+            commands::get_offline_estimate,
+            commands::start_download,
+            commands::pause_download,
+            commands::resume_download,
+            commands::cancel_download,
+            commands::list_downloads,
+            commands::delete_download,
+            commands::storage_usage,
             commands::get_desktop_settings,
             commands::update_desktop_settings,
         ])

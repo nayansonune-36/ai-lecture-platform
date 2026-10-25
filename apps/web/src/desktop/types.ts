@@ -44,14 +44,31 @@ export interface CourseWithLectures {
   lectures: LectureItem[];
 }
 
-export interface DownloadedLecture {
+export interface DownloadRecord {
   lecture_id: string;
   course_title: string;
   lecture_title: string;
   rendition: number;
+  version: number;
+  path: string | null;
   size_bytes: number;
-  status: string;
+  sha256: string;
+  status: "pending" | "downloading" | "paused" | "encrypting" | "completed" | "failed" | string;
+  progress: number;
+  error: string | null;
+  created_at: string;
   completed_at: string | null;
+}
+
+export type DownloadedLecture = DownloadRecord;
+
+export interface DownloadProgressEvent {
+  lecture_id: string;
+  bytes_downloaded: number;
+  total_bytes: number;
+  speed_bps: number;
+  state: "pending" | "downloading" | "paused" | "encrypting" | "completed" | "failed" | string;
+  error?: string | null;
 }
 
 export interface DesktopSettingsInfo {
