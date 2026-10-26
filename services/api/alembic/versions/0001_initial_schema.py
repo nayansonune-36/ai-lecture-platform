@@ -52,8 +52,8 @@ def upgrade() -> None:
         is_active      boolean NOT NULL DEFAULT true,
         created_at     timestamptz NOT NULL DEFAULT now()
     );
-    CREATE UNIQUE INDEX users_email_lower_uq ON users (lower(email));
     """)
+    op.execute("CREATE UNIQUE INDEX users_email_lower_uq ON users (lower(email));")
 
     op.execute("""
     CREATE TABLE refresh_tokens (
@@ -64,8 +64,8 @@ def upgrade() -> None:
         revoked_at  timestamptz,
         created_at  timestamptz NOT NULL DEFAULT now()
     );
-    CREATE INDEX refresh_tokens_user_idx ON refresh_tokens (user_id);
     """)
+    op.execute("CREATE INDEX refresh_tokens_user_idx ON refresh_tokens (user_id);")
 
     op.execute("""
     CREATE TABLE courses (
@@ -89,8 +89,8 @@ def upgrade() -> None:
         created_at  timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (course_id, user_id)
     );
-    CREATE INDEX enrollments_user_idx ON enrollments (user_id);
     """)
+    op.execute("CREATE INDEX enrollments_user_idx ON enrollments (user_id);")
 
     # -------------------------------------------------------------------------
     # 4. Lectures and media
@@ -113,8 +113,8 @@ def upgrade() -> None:
         created_at        timestamptz NOT NULL DEFAULT now(),
         updated_at        timestamptz NOT NULL DEFAULT now()
     );
-    CREATE INDEX lectures_course_idx ON lectures (course_id, position);
     """)
+    op.execute("CREATE INDEX lectures_course_idx ON lectures (course_id, position);")
 
     op.execute("""
     CREATE TABLE lecture_renditions (
@@ -159,12 +159,16 @@ def upgrade() -> None:
         tsv         tsvector GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED,
         UNIQUE (lecture_id, idx)
     );
-    CREATE INDEX chunks_lecture_idx ON transcript_chunks (lecture_id, start_ms);
-    CREATE INDEX chunks_tsv_gin     ON transcript_chunks USING gin (tsv);
-    CREATE INDEX chunks_trgm_gin    ON transcript_chunks USING gin (text gin_trgm_ops);
-    CREATE INDEX chunks_embedding_hnsw ON transcript_chunks
-        USING hnsw (embedding vector_cosine_ops);
     """)
+    op.execute("CREATE INDEX chunks_lecture_idx ON transcript_chunks (lecture_id, start_ms);")
+    op.execute("CREATE INDEX chunks_tsv_gin     ON transcript_chunks USING gin (tsv);")
+    op.execute(
+        "CREATE INDEX chunks_trgm_gin ON transcript_chunks USING gin (text gin_trgm_ops);"
+    )
+    op.execute(
+        "CREATE INDEX chunks_embedding_hnsw ON transcript_chunks "
+        "USING hnsw (embedding vector_cosine_ops);"
+    )
 
     op.execute("""
     CREATE TABLE chapters (
@@ -221,8 +225,8 @@ def upgrade() -> None:
         grounded    boolean,
         created_at  timestamptz NOT NULL DEFAULT now()
     );
-    CREATE INDEX chat_messages_session_idx ON chat_messages (session_id, id);
     """)
+    op.execute("CREATE INDEX chat_messages_session_idx ON chat_messages (session_id, id);")
 
     # -------------------------------------------------------------------------
     # 7. Offline devices and licenses
@@ -268,9 +272,9 @@ def upgrade() -> None:
         started_at   timestamptz,
         finished_at  timestamptz
     );
-    CREATE INDEX jobs_lecture_idx ON jobs (lecture_id, type);
-    CREATE INDEX jobs_status_idx  ON jobs (status, created_at);
     """)
+    op.execute("CREATE INDEX jobs_lecture_idx ON jobs (lecture_id, type);")
+    op.execute("CREATE INDEX jobs_status_idx  ON jobs (status, created_at);")
 
     # -------------------------------------------------------------------------
     # 9. Access helper function

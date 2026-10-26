@@ -33,7 +33,12 @@ class User(Base):
     email: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", native_enum=True),
+        Enum(
+            UserRole,
+            name="user_role",
+            native_enum=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=UserRole.STUDENT,
         server_default=text("'student'"),

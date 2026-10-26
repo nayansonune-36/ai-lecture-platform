@@ -33,11 +33,21 @@ class Job(Base):
         nullable=True,
     )
     type: Mapped[JobType] = mapped_column(
-        Enum(JobType, name="job_type", native_enum=True),
+        Enum(
+            JobType,
+            name="job_type",
+            native_enum=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
     )
     status: Mapped[JobStatus] = mapped_column(
-        Enum(JobStatus, name="job_status", native_enum=True),
+        Enum(
+            JobStatus,
+            name="job_status",
+            native_enum=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=JobStatus.QUEUED,
         server_default=text("'queued'"),

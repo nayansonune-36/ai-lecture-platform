@@ -10,6 +10,11 @@ Repeatable: Running multiple times will not duplicate records.
 
 import asyncio
 import logging
+import sys
+from pathlib import Path
+
+# Ensure services/api is on sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -12,62 +12,61 @@ This runbook covers how to run, inspect, recover, and back up the University AI 
 - Node.js 20+ with `pnpm` 10+
 - FFmpeg & ffprobe 6.0+ (on PATH for local worker execution)
 
-### Step 1: Infrastructure (Docker Compose)
-Start the Postgres (pgvector), Redis, Caddy, and Ollama containers:
-```bash
-docker compose -f infra/docker-compose.yml up -d
-```
-Verify containers are healthy:
-```bash
-docker compose -f infra/docker-compose.yml ps
-```
+### Windows Development: First-Time Setup Sequence
+On Windows, when running services directly on the host while dependencies run in Docker, follow this exact sequence:
 
-### Step 2: Database Migration & Seeding
-From the repository root:
-```bash
-cd services/api
-uv sync
-uv run alembic upgrade head
-# Seed initial users (1 admin, 1 professor, 2 students)
-uv run python -m app.seed
-```
+1. **Start Infrastructure**:
+   ```powershell
+   docker compose -f infra/docker-compose.yml up -d --wait
+   ```
+   Postgres (5432) and Redis (6379) are published to `127.0.0.1` only. The `--wait` flag guarantees containers are healthy before continuing.
 
-### Step 3: API Service
-Start the FastAPI server:
-```bash
-cd services/api
-uv run fastapi dev app/main.py --host 0.0.0.0 --port 8000
-# Production mode:
-# uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
+2. **Run Dev Environment Setup**:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts/setup-dev.ps1
+   ```
+   This safely initializes `.env` from `.env.example` (if missing), generates cryptographically secure `SECRET_KEY` and `MEDIA_SIGNING_KEY`, creates `STORAGE_ROOT` as an absolute path, and generates the Ed25519 `LICENSE_SIGNING_KEY`. It preserves existing values and never prints secrets.
 
-### Step 4: Background Worker Service
-Start the ARQ worker to handle media transcoding and processing:
-```bash
-cd services/worker
-uv sync
-uv run arq worker.WorkerSettings
-```
+3. **Run Database Migrations**:
+   ```powershell
+   cd services/api
+   uv run alembic upgrade head
+   ```
 
-### Step 5: Web Application
-Start the frontend development server or build for production:
-```bash
-# In the web app directory:
-pnpm --filter web dev
+4. **Seed Database Users**:
+   ```powershell
+   cd services/api
+   uv run python scripts/seed.py
+   ```
+   Seeds 1 admin, 1 professor, and 2 students (idempotent).
 
-# Or build static assets:
-pnpm --filter web build
-```
+5. **Start API Server**:
+   ```powershell
+   cd services/api
+   uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   # Or with fastapi cli:
+   # uv run fastapi dev app/main.py --host 0.0.0.0 --port 8000
+   ```
+   *Note*: Binds to `0.0.0.0:8000` on the host so Caddy inside Docker can reach the API via `host.docker.internal:8000`.
 
-### Step 6: Student Desktop Application (Tauri v2)
-To launch the Windows student desktop application in development mode:
-```bash
-pnpm --filter desktop tauri dev
-```
-Prerequisites:
-- Rust (1.75+) and Cargo installed on the host.
-- Windows 10/11 with WebView2 Runtime (standard on modern Windows).
-- The desktop application automatically starts the frontend on `http://localhost:5173` and binds the native Rust shell with SQLite database, Windows Credential Manager integration, and local desktop screens.
+6. **Start Background Worker**:
+   ```powershell
+   cd services/worker
+   uv run arq worker.WorkerSettings
+   ```
+
+7. **Start Frontend Web Application**:
+   ```powershell
+   pnpm --filter web dev
+   ```
+   Vite starts on `http://localhost:5173`. Access the full application through Caddy at `http://localhost:8080`.
+
+8. **Start Student Desktop Application (Tauri v2)**:
+   ```powershell
+   pnpm --filter desktop tauri dev
+   ```
+
+---
 
 ---
 
@@ -302,4 +301,70 @@ Before deploying or promoting the Phase 1 release to the campus network, complet
   5. **Switch language to Hindi (`हिन्दी`)**:
      - Confirm UI re-renders immediately in Devanagari script using locally bundled `@fontsource/noto-sans-devanagari`.
      - Inspect browser Developer Tools Network tab: confirm **0 requests fail**, **0 requests time out**, and **0 external domain requests** are attempted.
+
+---
+
+## 8. Troubleshooting Local Development
+
+### 1. Connection Refused (`[WinError 1225]` or `Errno 111` or `ConnectionRefusedError`)
+
+- **Symptoms**:
+  - `uv run alembic upgrade head` fails with `ConnectionRefusedError: [WinError 1225] The remote computer refused the network connection`.
+  - API or worker startup logs show `ConnectionRefusedError` connecting to port 5432 or 6379.
+- **Root Cause**:
+  1. The Docker containers for PostgreSQL or Redis are not running, or are not yet ready.
+  2. The ports are not published to the Windows host (`127.0.0.1:5432` / `127.0.0.1:6379`) in `infra/docker-compose.yml`.
+  3. The service attempted to connect via IPv6 `::1` because `localhost` was specified instead of `127.0.0.1`.
+- **Resolution**:
+  1. Start containers and wait for healthchecks:
+     ```powershell
+     docker compose -f infra/docker-compose.yml up -d --wait
+     ```
+  2. Confirm containers are healthy and ports are published to `127.0.0.1`:
+     ```powershell
+     docker compose -f infra/docker-compose.yml ps
+     ```
+     Expected output shows:
+     - `127.0.0.1:5432->5432/tcp`
+     - `127.0.0.1:6379->6379/tcp`
+  3. Verify host port connectivity:
+     ```powershell
+     Test-NetConnection 127.0.0.1 -Port 5432
+     Test-NetConnection 127.0.0.1 -Port 6379
+     ```
+  4. Ensure `.env` uses `127.0.0.1` (not `localhost` or Docker internal names):
+     ```env
+     DATABASE_URL=postgresql+asyncpg://postgres:postgres_dev_password@127.0.0.1:5432/lecture_platform
+     REDIS_URL=redis://127.0.0.1:6379/0
+     ```
+
+### 2. Name or Service Not Known (`socket.gaierror: [Errno 11001] getaddrinfo failed`)
+
+- **Symptoms**:
+  - `alembic upgrade head`, the FastAPI app, or the worker fails with:
+    `socket.gaierror: [Errno 11001] getaddrinfo failed` or `asyncpg.exceptions.CannotConnectNowError: Name or service not known: postgres:5432`.
+- **Root Cause**:
+  - The `.env` file contains Docker container hostnames (`postgres`, `redis`, `ollama`).
+  - Docker internal DNS names are only resolvable within Docker container bridge networks, not by processes running on the Windows host.
+- **Resolution**:
+  1. Run the dev setup script to reconfigure `.env` with host-compatible endpoints:
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File scripts/setup-dev.ps1
+     ```
+  2. Check your `.env` file at the repository root and verify that host addresses are used:
+     - `DATABASE_URL` uses `@127.0.0.1:5432`
+     - `REDIS_URL` uses `redis://127.0.0.1:6379/0`
+     - `OLLAMA_BASE_URL` uses `http://127.0.0.1:11434`
+  3. Ensure there is no stray `.env` inside `services/api/` or `services/worker/` overriding the root `.env`.
+
+### 3. Invalid STORAGE_ROOT at Startup (`ValueError: STORAGE_ROOT must be an absolute path`)
+
+- **Symptoms**:
+  - API or worker fails to start with:
+    `ValueError: STORAGE_ROOT must be an absolute path, got relative path './storage'.`
+- **Root Cause**:
+  - `STORAGE_ROOT` in `.env` is set to a relative path like `./storage`. Relative paths resolve differently depending on the working directory (e.g. `services/api` vs `services/worker`), causing media and uploads to be stored in mismatched folders.
+- **Resolution**:
+  1. Run `powershell -ExecutionPolicy Bypass -File scripts/setup-dev.ps1` to set `STORAGE_ROOT` to the absolute path of `<repo-root>\storage`.
+  2. Ensure the directory exists and has read/write permissions for the current user.
 

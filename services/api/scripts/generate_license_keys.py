@@ -39,4 +39,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if "--raw-private" in sys.argv:
+        priv_pem, _ = generate_license_keypair()
+        print(priv_pem.replace("\n", "\\n"))
+    else:
+        main()

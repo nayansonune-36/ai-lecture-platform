@@ -32,7 +32,12 @@ class Enrollment(Base):
         primary_key=True,
     )
     role: Mapped[EnrollmentRole] = mapped_column(
-        Enum(EnrollmentRole, name="enrollment_role", native_enum=True),
+        Enum(
+            EnrollmentRole,
+            name="enrollment_role",
+            native_enum=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=EnrollmentRole.STUDENT,
         server_default=text("'student'"),

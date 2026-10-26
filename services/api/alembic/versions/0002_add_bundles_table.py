@@ -29,8 +29,8 @@ def upgrade() -> None:
         created_at  timestamptz NOT NULL DEFAULT now(),
         UNIQUE (lecture_id, rendition, version)
     );
-    CREATE INDEX bundles_lecture_rendition_idx ON bundles (lecture_id, rendition);
     """)
+    op.execute("CREATE INDEX bundles_lecture_rendition_idx ON bundles (lecture_id, rendition);")
 
 
 def downgrade() -> None:

@@ -132,3 +132,17 @@ async def reset_failed_login(email: str, _client_ip: str) -> None:
 def clear_memory_store() -> None:
     """Clear memory store (useful for unit tests)."""
     _memory_store.clear()
+
+
+async def clear_rate_limits() -> None:
+    """Clear both Redis and in-memory rate limit records (useful for test isolation)."""
+    _memory_store.clear()
+    redis_client = await _get_redis_client()
+    if redis_client is not None:
+        try:
+            keys = await redis_client.keys("rl:login:*")
+            if keys:
+                await redis_client.delete(*keys)
+            await redis_client.aclose()
+        except Exception:
+            pass

@@ -56,7 +56,12 @@ class Lecture(Base):
         server_default=text("0"),
     )
     status: Mapped[LectureStatus] = mapped_column(
-        Enum(LectureStatus, name="lecture_status", native_enum=True),
+        Enum(
+            LectureStatus,
+            name="lecture_status",
+            native_enum=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=LectureStatus.UPLOADED,
         server_default=text("'uploaded'"),

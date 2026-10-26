@@ -13,15 +13,15 @@ from app.db import Base, get_db
 from app.main import app
 from app.models.enums import UserRole
 from app.models.user import User
-from app.services.rate_limiter import clear_memory_store
+from app.services.rate_limiter import clear_rate_limits
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def _reset_rate_limits() -> None:
-    """Clear in-memory rate limiting state before every test."""
-    clear_memory_store()
+    """Clear rate limiting state before every test."""
+    await clear_rate_limits()
 
 
 @pytest_asyncio.fixture
