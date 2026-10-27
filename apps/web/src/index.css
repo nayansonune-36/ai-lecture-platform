@@ -302,113 +302,476 @@ body {
   color: var(--text-secondary);
 }
 
-/* Login Page */
-.login-page-container {
-  min-height: calc(100vh - 160px);
+/* Login Page (Figma Student Portal Design) */
+.portal-shell {
+  display: grid;
+  grid-template-columns: 38% 62%;
+  min-height: 100vh;
+  background: #ffffff;
+  color: #2a2a2a;
+}
+
+.content-panel {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding: 38px 48px 62px 49px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.portal-top-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.phone-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #656565;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.phone-line svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #e12727;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.lang-toggle-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.lang-toggle-btn:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.intro {
+  margin-top: 33px;
+  white-space: nowrap;
+}
+
+.eyebrow {
+  color: #e02020;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.5px;
+}
+
+.intro h1 {
+  margin-top: 14px;
+  color: #242424;
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  line-height: 1.2;
+}
+
+.intro-copy {
+  margin-top: 14px;
+  color: #696969;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: normal;
+  max-width: 480px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  border: 2px solid #ed2727;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #2a2a2a;
 }
 
 .login-card {
-  width: 100%;
-  max-width: 440px;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 2.5rem;
-  box-shadow: var(--shadow-lg);
+  min-height: 480px;
+  margin-top: 36px;
+  padding: 30px 28px 26px;
 }
 
-.login-header {
-  text-align: center;
-  margin-bottom: 2rem;
+.card-heading h2 {
+  color: #2d2d2d;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.45px;
+  line-height: 1.2;
+}
+
+.card-heading p {
+  margin-top: 5px;
+  color: #707070;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .login-icon-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background-color: rgba(37, 99, 235, 0.15);
-  color: var(--color-primary);
-  margin-bottom: 1rem;
+  background-color: rgba(237, 39, 39, 0.1);
+  color: #d52a2a;
+  margin-bottom: 0.75rem;
 }
 
-.login-subtitle {
-  color: var(--text-secondary);
-  font-size: 0.9375rem;
-  margin-top: 0.5rem;
+.auth-card form {
+  margin-top: 24px;
 }
 
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-group label {
-  font-size: 0.875rem;
+.auth-card form > label {
+  display: block;
+  margin-bottom: 6px;
+  color: #2e2e2e;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
 }
 
-.form-group input {
-  background-color: var(--bg-input);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  min-height: 48px;
+.auth-card input:not([type='checkbox']),
+.auth-card textarea {
+  display: block;
+  width: 100%;
+  border: 1px solid #d3d3d3;
+  border-radius: 6px;
   outline: none;
-  transition: border-color 0.15s;
+  background: #ffffff;
+  color: #2a2a2a;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.form-group input:focus {
-  border-color: var(--border-focus);
+.auth-card input:not([type='checkbox']) {
+  height: 44px;
+  padding: 0 13px;
 }
 
-.submit-btn {
-  background-color: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 0.875rem;
-  font-size: 1rem;
-  font-weight: 600;
+.auth-card textarea {
+  min-height: 76px;
+  padding: 10px 13px;
+  resize: vertical;
+}
+
+.auth-card input::placeholder,
+.auth-card textarea::placeholder {
+  color: #a8a8a8;
+}
+
+.auth-card input:focus,
+.auth-card textarea:focus {
+  border-color: #df2929;
+  box-shadow: 0 0 0 3px rgba(223, 41, 41, 0.12);
+}
+
+.auth-card form > input + label,
+.auth-card form > textarea + label,
+.password-field + label {
+  margin-top: 14px;
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  padding-right: 46px !important;
+}
+
+.eye-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 0 6px 6px 0;
+  background: transparent;
+  color: #676767;
   cursor: pointer;
-  min-height: 52px;
-  margin-top: 0.5rem;
-  transition: background-color 0.15s;
 }
 
-.submit-btn:hover:not(:disabled) {
-  background-color: var(--color-primary-hover);
+.eye-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
-.submit-btn:disabled {
+.form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  color: #686868;
+  font-size: 13px;
+}
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.check-label input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #d62828;
+  cursor: pointer;
+}
+
+.auth-card a,
+.content-panel a,
+.link-button {
+  color: #df1f1f;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.auth-card a:hover,
+.content-panel a:hover,
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.primary-button {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: #d52a2a;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, transform 100ms ease;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #bd2020;
+}
+
+.primary-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.primary-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
+.primary-button:focus-visible,
+.eye-button:focus-visible {
+  outline: 3px solid rgba(225, 39, 39, 0.28);
+  outline-offset: 2px;
+}
+
+.account-help {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.account-help p {
+  color: #717171;
+}
+
+.form-message {
+  margin-top: 12px;
+  color: #15803d;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .error-banner {
-  background-color: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  margin-bottom: 1.25rem;
+  margin-top: 16px;
+  color: #b91c1c;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.campus-visual {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  min-height: 600px;
+  background: #364c57 url('/assets/campus-login.jpg') center center / cover no-repeat;
+}
+
+.secondary-card {
+  margin-top: 36px;
+  padding: 26px 28px 28px;
+}
+
+.secondary-card .card-heading {
+  margin-top: 18px;
+}
+
+.secondary-card form {
+  margin-top: 22px;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #df1f1f;
+}
+
+.back-link svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.page-note {
+  margin-top: 22px;
+  color: #6f6f6f;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.contact-card form > input + label,
+.contact-card form > textarea + label {
+  margin-top: 12px;
+}
+
+@media (max-width: 1100px) {
+  .portal-shell {
+    grid-template-columns: minmax(460px, 50%) 1fr;
+  }
+
+  .content-panel {
+    padding-right: 36px;
+  }
+
+  .intro {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 760px) {
+  .portal-shell {
+    display: block;
+    min-height: 100dvh;
+    background:
+      linear-gradient(rgba(18, 39, 49, 0.72), rgba(18, 39, 49, 0.72)),
+      url('/assets/campus-login.jpg') center / cover fixed;
+  }
+
+  .content-panel {
+    min-height: 100dvh;
+    padding: 24px 20px 40px;
+    background: rgba(255, 255, 255, 0.96);
+  }
+
+  .campus-visual {
+    display: none;
+  }
+
+  .intro {
+    margin-top: 24px;
+    margin-left: 0;
+  }
+
+  .intro h1 {
+    margin-top: 10px;
+    font-size: clamp(30px, 8vw, 38px);
+  }
+
+  .intro-copy {
+    max-width: 430px;
+    font-size: 14px;
+  }
+
+  .auth-card {
+    max-width: 440px;
+  }
+
+  .login-card,
+  .secondary-card {
+    min-height: 0;
+    margin-top: 30px;
+    padding: 24px 20px 24px;
+  }
+
+  .auth-card form {
+    margin-top: 24px;
+  }
+}
+
+@media (max-width: 390px) {
+  .content-panel {
+    padding-inline: 14px;
+  }
+
+  .card-heading h2 {
+    font-size: 21px;
+  }
+
+  .login-card,
+  .secondary-card {
+    padding-inline: 16px;
+  }
+
+  .form-options {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
 }
 
 /* Page Layouts */

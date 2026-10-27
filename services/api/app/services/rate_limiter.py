@@ -1,5 +1,6 @@
 """Rate limiting service using Redis with in-memory fallback."""
 
+import ipaddress
 import logging
 import time
 from datetime import UTC, datetime, timedelta
@@ -19,6 +20,21 @@ MAX_FAILED_ATTEMPTS = 5
 
 _redis_available: bool | None = None
 _redis_last_check: float = 0.0
+
+
+def is_shared_proxy_or_docker_gateway(client_ip: str) -> bool:
+    """Detect if client IP is Docker bridge gateway or loopback to avoid locking entire LAN."""
+    ip = client_ip.strip()
+    if ip in ("127.0.0.1", "::1", "localhost", "testclient"):
+        return True
+    try:
+        ip_addr = ipaddress.ip_address(ip)
+        # Docker default bridge uses 172.16.0.0/12 (e.g. 172.17.x.x - 172.31.x.x)
+        if ip_addr in ipaddress.ip_network("172.16.0.0/12"):
+            return True
+    except ValueError:
+        pass
+    return False
 
 
 async def _get_redis_client() -> aioredis.Redis | None:
@@ -61,12 +77,13 @@ async def is_login_rate_limited(email: str, client_ip: str) -> bool:
     """Check if either the account or the client IP has exceeded failed login attempts."""
     account_key = f"rl:login:acc:{email.lower().strip()}"
     ip_key = f"rl:login:ip:{client_ip.strip()}"
+    skip_ip = is_shared_proxy_or_docker_gateway(client_ip)
 
     redis_client = await _get_redis_client()
     if redis_client is not None:
         try:
             acc_count = await redis_client.get(account_key)
-            ip_count = await redis_client.get(ip_key)
+            ip_count = None if skip_ip else await redis_client.get(ip_key)
             await redis_client.aclose()
 
             if acc_count and int(acc_count) >= MAX_FAILED_ATTEMPTS:
@@ -83,7 +100,7 @@ async def is_login_rate_limited(email: str, client_ip: str) -> bool:
 
     cutoff = now - timedelta(seconds=WINDOW_SECONDS)
     acc_recent = [t for t in _memory_store.get(account_key, []) if t > cutoff]
-    ip_recent = [t for t in _memory_store.get(ip_key, []) if t > cutoff]
+    ip_recent = [] if skip_ip else [t for t in _memory_store.get(ip_key, []) if t > cutoff]
 
     return len(acc_recent) >= MAX_FAILED_ATTEMPTS or len(ip_recent) >= MAX_FAILED_ATTEMPTS
 
@@ -92,6 +109,7 @@ async def record_failed_login(email: str, client_ip: str) -> None:
     """Record a failed login attempt for account and IP."""
     account_key = f"rl:login:acc:{email.lower().strip()}"
     ip_key = f"rl:login:ip:{client_ip.strip()}"
+    skip_ip = is_shared_proxy_or_docker_gateway(client_ip)
 
     redis_client = await _get_redis_client()
     if redis_client is not None:
@@ -99,8 +117,9 @@ async def record_failed_login(email: str, client_ip: str) -> None:
             pipe = redis_client.pipeline()
             pipe.incr(account_key)
             pipe.expire(account_key, WINDOW_SECONDS)
-            pipe.incr(ip_key)
-            pipe.expire(ip_key, WINDOW_SECONDS)
+            if not skip_ip:
+                pipe.incr(ip_key)
+                pipe.expire(ip_key, WINDOW_SECONDS)
             await pipe.execute()
             await redis_client.aclose()
             return
@@ -112,7 +131,8 @@ async def record_failed_login(email: str, client_ip: str) -> None:
     _cleanup_memory_store(now)
 
     _memory_store.setdefault(account_key, []).append(now)
-    _memory_store.setdefault(ip_key, []).append(now)
+    if not skip_ip:
+        _memory_store.setdefault(ip_key, []).append(now)
 
 
 async def reset_failed_login(email: str, _client_ip: str) -> None:

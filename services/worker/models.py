@@ -66,10 +66,13 @@ class Course(Base):
 class LectureStatus(enum.StrEnum):
     """Lecture processing and readiness status."""
 
-    DRAFT = "draft"
+    UPLOADED = "uploaded"
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
+
+    # Backward-compatibility alias
+    DRAFT = "uploaded"
 
 
 class Lecture(Base):
@@ -91,12 +94,26 @@ class Lecture(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     original_path: Mapped[str] = mapped_column(Text, nullable=False)
     duration_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    primary_language: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[LectureStatus] = mapped_column(
-        Enum(LectureStatus, name="lecture_status", native_enum=False),
+        Enum(
+            LectureStatus,
+            name="lecture_status",
+            native_enum=True,
+            values_callable=lambda x: list(dict.fromkeys(e.value for e in x)),
+        ),
         nullable=False,
-        default=LectureStatus.DRAFT,
+        default=LectureStatus.UPLOADED,
     )
+
+    @property
+    def language(self) -> str | None:
+        """Alias for primary_language."""
+        return self.primary_language
+
+    @language.setter
+    def language(self, val: str | None) -> None:
+        self.primary_language = val
     published: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -186,11 +203,21 @@ class Job(Base):
         nullable=True,
     )
     type: Mapped[JobType] = mapped_column(
-        Enum(JobType, name="job_type", native_enum=False),
+        Enum(
+            JobType,
+            name="job_type",
+            native_enum=True,
+            values_callable=lambda x: list(dict.fromkeys(e.value for e in x)),
+        ),
         nullable=False,
     )
     status: Mapped[JobStatus] = mapped_column(
-        Enum(JobStatus, name="job_status", native_enum=False),
+        Enum(
+            JobStatus,
+            name="job_status",
+            native_enum=True,
+            values_callable=lambda x: list(dict.fromkeys(e.value for e in x)),
+        ),
         nullable=False,
         default=JobStatus.QUEUED,
     )

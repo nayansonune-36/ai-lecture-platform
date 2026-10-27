@@ -140,10 +140,18 @@ export const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(function HlsPl
     setErrorMessage(null);
 
     if (Hls.isSupported()) {
+      const queryIndex = manifestUrl.indexOf("?");
+      const queryParams = queryIndex !== -1 ? manifestUrl.slice(queryIndex) : "";
+
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         backBufferLength: 60,
+        xhrSetup: (xhr, url) => {
+          if (queryParams && !url.includes("?")) {
+            xhr.open("GET", `${url}${queryParams}`, true);
+          }
+        },
       });
 
       hlsRef.current = hls;

@@ -1,4 +1,5 @@
 {
+	debug
 	auto_https off
 	admin off
 }
@@ -12,7 +13,7 @@
 	# Protected media and bundle delivery with forward_auth
 	handle /media/* {
 		forward_auth host.docker.internal:8000 {
-			uri /api/v1/internal/auth/video?path={path}&{query}
+			uri /api/v1/internal/auth/video?path={http.request.orig_uri.path}&{http.request.uri.query}
 			copy_headers Range
 		}
 		root * /storage

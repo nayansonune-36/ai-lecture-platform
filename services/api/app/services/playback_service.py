@@ -37,6 +37,32 @@ def generate_signed_media_url(
     return f"{path}?exp={expires_at_unix}&uid={user_id}&sig={sig}"
 
 
+def get_candidate_media_paths(path: str) -> list[str]:
+    """Return all valid candidate paths that could have been signed for this resource.
+
+    Handles:
+    1. Exact path matches
+    2. Caddy strip_prefix /media discrepancies (/lectures/... vs /media/lectures/...)
+    3. HLS child playlist and segment URLs inheriting the signature from master.m3u8
+    """
+    candidates = [path]
+    if path.startswith("/media"):
+        candidates.append(path[len("/media"):])
+    else:
+        candidates.append(f"/media{path}")
+
+    # Check if this is an HLS sub-resource (variant playlist, init mp4, segments)
+    # Norm format: /media/lectures/<lecture_id>/hls/<subpath>
+    norm = path if path.startswith("/media") else f"/media{path}"
+    parts = norm.split("/")
+    if len(parts) >= 6 and parts[1] == "media" and parts[2] == "lectures" and parts[4] == "hls":
+        lecture_id = parts[3]
+        candidates.append(f"/media/lectures/{lecture_id}/hls/master.m3u8")
+        candidates.append(f"/lectures/{lecture_id}/hls/master.m3u8")
+
+    return list(dict.fromkeys(candidates))
+
+
 def verify_signed_media_url(
     path: str,
     user_id: str,
@@ -49,13 +75,17 @@ def verify_signed_media_url(
     if exp < now_unix:
         return False
 
-    message = f"{path}|{exp}|{user_id}"
-    expected_sig = hmac.new(
-        signing_key.encode("utf-8"),
-        message.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(sig, expected_sig)
+    for candidate in get_candidate_media_paths(path):
+        message = f"{candidate}|{exp}|{user_id}"
+        expected_sig = hmac.new(
+            signing_key.encode("utf-8"),
+            message.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        if hmac.compare_digest(sig, expected_sig):
+            return True
+
+    return False
 
 
 async def create_playback_token(
